@@ -1,0 +1,48 @@
+SELECT 
+    cg_id,
+    line_item_id,
+    container_id,
+    "state",
+    local_market,
+    steri_market,
+    jbin,
+    tradelane,
+    ls_tradelane,
+    ss_tradelane,
+    "STD Cartons"std_cartons,
+    packed_datetime,
+    enter_packhouse,
+    packhouse_dwell,
+    departed_packhouse_date,
+    exit_packhouse,
+    dispatch_dwell,
+    enter_cs_date,
+    enter_coldstore,
+    cs_fbo_code,
+    cold_store_dwell,
+    exit_cs_date,
+    exit_coldstore,
+    current_coldstore,
+    cs_to_gi_dwell,
+    gate_in_date,
+    origin_port_id,
+    origin_port,
+    gi_to_load_dwell,
+    load_date,
+    load_vessel,
+    load_to_dpl_dwell,
+    dpl_date,
+    dpl_voyage,
+    dpl_to_adp_dwell,
+    adp_date,
+    discharge_date,
+    destination_port,
+    destination_port_country_code,
+    discharge_to_gate_out_dwell,
+    gate_out_date
+
+FROM 
+    data_science.mv_pallet_timeline
+
+WHERE 
+    map_season_year = 2024 AND commodity_group = 'Citrus'

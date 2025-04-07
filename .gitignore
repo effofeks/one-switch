@@ -1,0 +1,6 @@
+.env
+**/.streamlit
+**/__pycache__
+**/.venv
+**/output
+**/data

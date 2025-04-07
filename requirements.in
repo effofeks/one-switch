@@ -1,0 +1,17 @@
+pandas
+numpy
+ipykernel
+jupyter
+psycopg2-binary
+sqlalchemy
+python-dotenv
+matplotlib
+matplotlib_venn
+statsmodels
+networkx
+mplcursors
+seaborn
+geopandas
+squarify
+streamlit
+plotly
