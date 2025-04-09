@@ -1,67 +1,45 @@
 import streamlit as st
 import matplotlib.pyplot as plt
-from viz_utils import get_strong_connection_focal_info, create_weighted_graph, anim_to_html
-from network_analysis import (
+from viz_utils import get_strong_connection_focal_info, create_weighted_graph
+from modules.network import (
     visualize_strong_connections,
     visualize_company_network,
     create_network_timelapse,
 )
-from cg_analysis import (
+from modules.heatmap import (
     create_heatmap,
     create_heatmap_packing_week,
     calculate_concentration_metrics,
     plot_concentration_bubble,
 )
-from matplotlib.colors import LinearSegmentedColormap
 
 
 def initialize_session_state():
     """Initialize session state variables if they don't exist."""
     # Data state
-    if "cg_df" not in st.session_state:
-        st.session_state.cg_df = None
-    if "agg_df" not in st.session_state:
-        st.session_state.agg_df = None
+    if "df" not in st.session_state:
+        st.session_state.df = None
     if "data_loaded" not in st.session_state:
         st.session_state.data_loaded = False
     if "company_ids" not in st.session_state:
         st.session_state.company_ids = []
-    
+
     # Unified visualization state
     if "visualization" not in st.session_state:
         st.session_state.visualization = {
-            "type": None,           # Type of visualization (e.g., "relationship", "heatmap")
-            "params": {},           # Parameters used to generate the visualization 
-            "result_df": None,      # Result dataframe (e.g., pivot_df, metrics_df)
-            "graph": None,          # Network graph for network visualizations
-            "plot": None,           # Matplotlib figure for static visualizations
-            "html": None,           # HTML content for interactive visualizations
-            "metadata": {}          # Additional metadata specific to visualization type
+            "type": None,  # Type of visualization (e.g., "relationship", "heatmap")
+            "df": None,
+            "params": {},  # Parameters used to generate the visualization
+            "graph": None,  # Network graph for network visualizations
+            "plot": None,  # Matplotlib figure for static visualizations
+            "html": None,  # HTML content for interactive visualizations
+            "metadata": {},
         }
-    
-    # For backward compatibility during transition
-    if "network_data" not in st.session_state:
-        st.session_state.network_data = None
-    if "viz_data" not in st.session_state:
-        st.session_state.viz_data = None
+
     if "current_plot" not in st.session_state:
         st.session_state.current_plot = None
     if "current_html" not in st.session_state:
         st.session_state.current_html = None
-
-    # Initialize the visualisation state flags if they don't exist
-    if "generating_strong_connections" not in st.session_state:
-        st.session_state.generating_strong_connections = False
-    if "generating_company_network" not in st.session_state:
-        st.session_state.generating_company_network = False
-    if "generating_network_timelapse" not in st.session_state:
-        st.session_state.generating_network_timelapse = False
-    if "generating_heatmap" not in st.session_state:
-        st.session_state.generating_heatmap = False
-    if "generating_packing_week_heatmap" not in st.session_state:
-        st.session_state.generating_packing_week_heatmap = False
-    if "generating_concentration_bubble" not in st.session_state:
-        st.session_state.generating_concentration_bubble = False
 
 
 def clear_visualisation_state():
@@ -69,33 +47,30 @@ def clear_visualisation_state():
     # Clear the unified visualization state
     st.session_state.visualization = {
         "type": None,
+        "df": None,
         "params": {},
-        "result_df": None,
         "graph": None,
         "plot": None,
         "html": None,
-        "metadata": {}
+        "metadata": {},
     }
-    
-    # For backward compatibility during transition
-    st.session_state.network_data = None
-    st.session_state.viz_data = None
+
     st.session_state.current_plot = None
     st.session_state.current_html = None
 
 
-def update_visualization(viz_type, params, result_df=None, graph=None, plot=None, html=None, metadata=None):
+def update_visualization(
+    viz_type, df, params, graph=None, plot=None, html=None, metadata=None
+):
     """
     Update the unified visualization state with new data.
-    
+
     Parameters:
     -----------
     viz_type : str
         Type of visualization (e.g., "relationship", "heatmap")
     params : dict
         Parameters used to generate the visualization
-    result_df : pandas.DataFrame, optional
-        Result dataframe (e.g., pivot_df, metrics_df)
     graph : networkx.Graph, optional
         Network graph for network visualizations
     plot : matplotlib.figure.Figure, optional
@@ -103,19 +78,19 @@ def update_visualization(viz_type, params, result_df=None, graph=None, plot=None
     html : str, optional
         HTML content for interactive visualizations
     metadata : dict, optional
-        Additional metadata specific to visualization type
+        Additional metadata for the visualization
     """
     # Update the unified visualization state
     st.session_state.visualization = {
         "type": viz_type,
+        "df": df,
         "params": params,
-        "result_df": result_df,
         "graph": graph,
         "plot": plot,
         "html": html,
-        "metadata": metadata or {}
+        "metadata": metadata,
     }
-    
+
     # For backward compatibility during transition
     st.session_state.current_plot = plot
     st.session_state.current_html = html
@@ -132,29 +107,29 @@ def increment_viz_id():
         st.session_state.last_viz_id = 1
 
 
-def update_data_state(cg_df):
+def update_data_state(df):
     """
     Update the data-related state variables.
-    
+
     Parameters:
     -----------
-    cg_df : pandas.DataFrame
+    df : pandas.DataFrame
         The carton groupings dataframe with essential data
     """
-    if cg_df is not None:
-        st.session_state.cg_df = cg_df
+    if df is not None:
+        st.session_state.df = df
         st.session_state.data_loaded = True
-        
-        # Initialize company_ids as empty list - will be populated when cg_df is created
+
+        # Initialize company_ids as empty list - will be populated when df is created
         st.session_state.company_ids = []
-        
-        # Calculate company IDs if cg_df is provided
-        if cg_df is not None:
-            buyer_ids = cg_df["buyer_id"].dropna().unique().tolist()
-            seller_ids = cg_df["seller_id"].dropna().unique().tolist()
+
+        # Calculate company IDs if df is provided
+        if df is not None:
+            buyer_ids = df["buyer_id"].dropna().unique().tolist()
+            seller_ids = df["seller_id"].dropna().unique().tolist()
             st.session_state.company_ids = sorted(list(set(buyer_ids + seller_ids)))
     else:
-        st.session_state.cg_df = None
+        st.session_state.df = None
         st.session_state.data_loaded = False
         st.session_state.company_ids = []
 
@@ -162,16 +137,14 @@ def update_data_state(cg_df):
 def generate_strong_connections_viz(params):
     """Generate the Strong Connections visualisation."""
     try:
-        # Check if agg_df exists in session state and is not None
-        if st.session_state.agg_df is None:
-            st.error("No aggregated data available. Please reload the data.")
+        # Check if df exists in session state and is not None
+        if st.session_state.visualization["df"] is None:
+            st.error("No data available.")
             return False
-            
+
         # Use wrapper function to get the focal edge info
         focal_info = get_strong_connection_focal_info(
-            agg_df=st.session_state.agg_df, 
-            rank=params["rank"], 
-            measure=params["measure"]
+            df=st.session_state.visualization['df'], rank=params["rank"], measure=params["measure"]
         )
 
         if not focal_info:
@@ -183,7 +156,7 @@ def generate_strong_connections_viz(params):
 
         # Call the visualisation function
         visualize_strong_connections(
-            agg_df=st.session_state.agg_df,
+            df=st.session_state.visualization['df'],
             rank=params["rank"],
             measure=params["measure"],
             degree=params["degree"],
@@ -194,36 +167,22 @@ def generate_strong_connections_viz(params):
         )
 
         # Create weighted graph for statistics
-        G = create_weighted_graph(st.session_state.agg_df, params["measure"])
+        G = create_weighted_graph(st.session_state.visualization['df'], params["measure"])
 
         # Get the current figure
         fig = plt.gcf()
         plt.close(fig)  # Close the figure to free memory
-        
+
         # Update the visualization state with the new data
         update_visualization(
             viz_type="relationship",
+            df=st.session_state.visualization['df'],
             params=params,
             graph=G,
             plot=fig,
-            metadata={"focal_info": focal_info}
+            metadata={"focal_info": focal_info},
         )
-        
-        # For backward compatibility during transition
-        st.session_state.network_data = {
-            "graph": G,
-            "type": "Strong Connections",
-            "params": params,
-            "focal_info": focal_info,
-        }
-        
-        st.session_state.viz_data = {
-            "type": "relationship",
-            "graph": G,
-            "params": params,
-            "focal_info": focal_info,
-        }
-        
+
         return True
     except Exception as e:
         st.error(f"Error generating Strong Connections visualisation: {str(e)}")
@@ -238,18 +197,17 @@ def generate_company_network_viz(params):
 
         # Call the visualisation function
         visualize_company_network(
-            agg_df=st.session_state.agg_df,
+            df=st.session_state.df,
             company_id=params["company_id"],
             measure=params["measure"],
             degree=params["degree"],
             layout=params["layout"],
             spacing=1.5,  # Use default spacing
-            iterations=params["iterations"],
             figsize=(14, 10),
         )
 
         # Create full graph for statistics
-        full_G = create_weighted_graph(st.session_state.agg_df, params["measure"])
+        full_G = create_weighted_graph(st.session_state.df, params["measure"])
 
         # Create subgraph for visualisation
         subgraph_nodes = set()
@@ -276,35 +234,17 @@ def generate_company_network_viz(params):
         # Get the current figure
         fig = plt.gcf()
         plt.close(fig)  # Close the figure to free memory
-        
+
         # Update the visualization state with the new data
         update_visualization(
             viz_type="company_network",
+            df=st.session_state.visualization['df'],
             params=params,
             graph=G,
             plot=fig,
-            metadata={
-                "full_graph": full_G,
-                "focal_company": company_id
-            }
+            metadata={"full_graph": full_G, "focal_company": company_id},
         )
-        
-        # For backward compatibility during transition  
-        st.session_state.network_data = {
-            "graph": G,  # The visualisation subgraph
-            "full_graph": full_G,  # The complete graph for statistics
-            "type": "Company Network",
-            "params": params,
-        }
-        
-        st.session_state.viz_data = {
-            "type": "company_network",
-            "graph": G,
-            "full_graph": full_G,
-            "params": params,
-            "focal_company": company_id
-        }
-        
+
         return True
     except Exception as e:
         st.error(f"Error generating Company Network visualisation: {str(e)}")
@@ -315,8 +255,8 @@ def generate_network_timelapse_viz(params):
     """Generate the Network Timelapse visualisation."""
     try:
         # Get the timelapse visualisation as HTML and all data
-        html, animation, G, time_slices = create_network_timelapse(
-            df=st.session_state.agg_df,
+        html, G, time_slices = create_network_timelapse(
+            df=st.session_state.df,
             measure=params["measure"],
             time_window=params["time_window"],
             min_weight=params["min_weight"],
@@ -328,27 +268,13 @@ def generate_network_timelapse_viz(params):
             # Update the visualization state with the new data
             update_visualization(
                 viz_type="network_timelapse",
+                df=st.session_state.visualization['df'],
                 params=params,
                 graph=G,
                 html=html,
-                metadata={"time_slices": time_slices}
+                metadata={"time_slices": time_slices},
             )
-            
-            # For backward compatibility during transition
-            st.session_state.network_data = {
-                "graph": G,  # The aggregated graph
-                "type": "Network Timelapse",
-                "params": params,
-                "time_slices": time_slices,
-            }
-            
-            st.session_state.viz_data = {
-                "type": "network_timelapse",
-                "graph": G,
-                "params": params,
-                "time_slices": time_slices,
-            }
-            
+
             return True
         else:
             st.error("Failed to generate animation.")
@@ -361,14 +287,14 @@ def generate_network_timelapse_viz(params):
 def generate_heatmap_viz(params):
     """Generate the Heatmap visualisation."""
     try:
-        # Check if cg_df exists in session state and is not None
-        if st.session_state.cg_df is None:
+        # Check if df exists in session state and is not None
+        if st.session_state.df is None:
             st.error("No data available. Please load the data.")
             return False
-            
+
         # Create a figure for capturing the visualisation
         fig, pivot_df = create_heatmap(
-            df=st.session_state.cg_df,
+            df=st.session_state.df,
             row_col=params["row_col"],
             col_col=params["col_col"],
             value_col=params["value_col"],
@@ -379,10 +305,11 @@ def generate_heatmap_viz(params):
 
         # Close the figure to free memory after storing it
         plt.close(fig)
-        
+
         # Update the visualization state with the new data
         update_visualization(
             viz_type="heatmap",
+            df=st.session_state.visualization['df'],
             params={
                 "x_axis": params["col_col"],
                 "y_axis": params["row_col"],
@@ -391,31 +318,9 @@ def generate_heatmap_viz(params):
                 "correct_multiple_tests": params["correct_multiple_tests"],
                 "min_effect_size": params["min_effect_size"],
             },
-            result_df=pivot_df,
-            plot=fig
+            plot=fig,
         )
-        
-        # For backward compatibility during transition
-        st.session_state.network_data = {
-            "graph": None,  # No graph for heatmap visualizations
-            "type": "Heatmap",
-            "params": params,
-            "pivot_df": pivot_df,
-        }
-        
-        st.session_state.viz_data = {
-            "type": "heatmap",
-            "data": pivot_df,
-            "params": {
-                "x_axis": params["col_col"],
-                "y_axis": params["row_col"],
-                "color_by": params["value_col"],
-                "significance_level": params["significance_level"],
-                "correct_multiple_tests": params["correct_multiple_tests"],
-                "min_effect_size": params["min_effect_size"],
-            }
-        }
-        
+
         return True
     except Exception as e:
         st.error(f"Error generating Heatmap: {str(e)}")
@@ -425,14 +330,14 @@ def generate_heatmap_viz(params):
 def generate_packing_week_heatmap_viz(params):
     """Generate the Packing Week Heatmap visualisation."""
     try:
-        # Check if cg_df exists in session state and is not None
-        if st.session_state.cg_df is None:
+        # Check if df exists in session state and is not None
+        if st.session_state.df is None:
             st.error("No data available. Please load the data.")
             return False
-            
+
         # Create a figure for capturing the visualisation
         fig, pivot_df = create_heatmap_packing_week(
-            df=st.session_state.cg_df,
+            df=st.session_state.df,
             col_col=params["col_col"],
             value_col=params["value_col"],
             significance_level=params["significance_level"],
@@ -442,10 +347,11 @@ def generate_packing_week_heatmap_viz(params):
 
         # Close the figure to free memory after storing it
         plt.close(fig)
-        
+
         # Update the visualization state with the new data
         update_visualization(
             viz_type="packing_week_heatmap",
+            df=st.session_state.visualization['df'],
             params={
                 "x_axis": "packing_week",
                 "y_axis": params["col_col"],
@@ -454,31 +360,8 @@ def generate_packing_week_heatmap_viz(params):
                 "correct_multiple_tests": params["correct_multiple_tests"],
                 "min_effect_size": params["min_effect_size"],
             },
-            result_df=pivot_df,
-            plot=fig
+            plot=fig,
         )
-        
-        # For backward compatibility during transition
-        st.session_state.network_data = {
-            "graph": None,  # No graph for heatmap visualizations
-            "type": "Packing Week Heatmap",
-            "params": params,
-            "pivot_df": pivot_df,
-        }
-        
-        st.session_state.viz_data = {
-            "type": "packing_week_heatmap",
-            "data": pivot_df,
-            "params": {
-                "x_axis": "packing_week",
-                "y_axis": params["col_col"],
-                "color_by": params["value_col"],
-                "significance_level": params["significance_level"],
-                "correct_multiple_tests": params["correct_multiple_tests"],
-                "min_effect_size": params["min_effect_size"],
-            }
-        }
-        
         return True
     except Exception as e:
         st.error(f"Error generating Packing Week Heatmap: {str(e)}")
@@ -488,33 +371,43 @@ def generate_packing_week_heatmap_viz(params):
 def generate_concentration_bubble_viz(params):
     """Generate the Concentration Bubble Plot visualisation."""
     try:
-        # Check if cg_df exists in session state and is not None
-        if st.session_state.cg_df is None:
+        import traceback
+        
+        # Debug: Print parameters
+        print(f"Concentration bubble parameters: {params}")
+        
+        # Check if df exists in session state and is not None
+        if st.session_state.visualization["df"] is None:
             st.error("No data available. Please load the data.")
             return False
             
+        print(f"Dataframe shape: {st.session_state.visualization['df'].shape}")
+        print(f"Dataframe columns: {st.session_state.visualization['df'].columns.tolist()}")
+
         # Calculate concentration metrics
         metrics_df = calculate_concentration_metrics(
-            df=st.session_state.cg_df,
+            df=st.session_state.visualization["df"],
             entity1_col=params["entity1_col"],
             entity2_col=params["entity2_col"],
             value_col=params["value_col"],
         )
         
+        print(f"Metrics dataframe shape: {metrics_df.shape}")
+        print(f"Metrics dataframe columns: {metrics_df.columns.tolist()}")
+        print(metrics_df.head())
+
         # Create bubble plot
         fig = plot_concentration_bubble(
             metrics_df=metrics_df,
-            title=params["title"],
-            min_pallets=params["min_pallets"],
-            label_threshold=params["label_threshold"],
         )
 
         # Close the figure to free memory after storing it
         plt.close(fig)
-        
+
         # Update the visualization state with the new data
         update_visualization(
             viz_type="concentration_bubble",
+            df=st.session_state.visualization["df"],
             params={
                 "x_axis": "herfindahl",
                 "y_axis": "cv",
@@ -523,38 +416,13 @@ def generate_concentration_bubble_viz(params):
                 "entity1_col": params["entity1_col"],
                 "entity2_col": params["entity2_col"],
                 "value_col": params["value_col"],
-                "min_pallets": params["min_pallets"],
-                "label_threshold": params["label_threshold"],
             },
-            result_df=metrics_df,
-            plot=fig
+            plot=fig,
         )
-        
-        # For backward compatibility during transition
-        st.session_state.network_data = {
-            "graph": None,  # No graph for bubble plot visualizations
-            "type": "Concentration Bubble Plot",
-            "params": params,
-            "metrics_df": metrics_df,
-        }
-        
-        st.session_state.viz_data = {
-            "type": "concentration_bubble",
-            "data": metrics_df,
-            "params": {
-                "x_axis": "herfindahl",
-                "y_axis": "cv",
-                "size_by": "volume",
-                "color_by": "entity1_col",
-                "entity1_col": params["entity1_col"],
-                "entity2_col": params["entity2_col"],
-                "value_col": params["value_col"],
-                "min_pallets": params["min_pallets"],
-                "label_threshold": params["label_threshold"],
-            }
-        }
-        
+
         return True
     except Exception as e:
+        print(f"Error in generate_concentration_bubble_viz: {str(e)}")
+        print(traceback.format_exc())
         st.error(f"Error generating Concentration Bubble Plot: {str(e)}")
-        return False 
+        return False

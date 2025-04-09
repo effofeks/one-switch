@@ -82,7 +82,7 @@ def render_data_filters():
     st.sidebar.header("Data Source")
 
     # Select season year
-    season_year = st.sidebar.selectbox(
+    season = st.sidebar.selectbox(
         "Season",
         [2022, 2023, 2024, 2025],
         index=2,  # Default to 2024
@@ -97,10 +97,10 @@ def render_data_filters():
         help="Select the commodity group",
     )
 
-    # Load data button
+    # Load data flag
     load_data = st.sidebar.button("Load Data")
 
-    return season_year, commodity_group, load_data
+    return season, commodity_group, load_data
 
 
 def render_visualisation_selector():
@@ -254,7 +254,7 @@ def render_heatmap_params():
     # All available variables
     all_variables = [
         "commodity_name", "variety_name", "production_region", "seller_id", "buyer_id", 
-        "local_market", "target_country", "jbin", "size_count"
+        "local_market", "target_country", "jbin", "size_count", "size_categorization", "class",
     ]
     
     # Initialize session state tracking variables with different keys than the widget keys
@@ -408,25 +408,6 @@ def render_packing_week_heatmap_params():
     else:  # revenue
         value_col = "income"
     
-    # Visualization parameters
-    title = st.sidebar.text_input(
-        "Title", 
-        f"Heatmap of Packing Week by {col_col.replace('_', ' ').title()}",
-        help="Title for the heatmap"
-    )
-    
-    normalize_rows = st.sidebar.checkbox(
-        "Normalize Rows", 
-        value=True,
-        help="Normalize each row (percentages sum to 1)"
-    )
-    
-    cmap = st.sidebar.selectbox(
-        "Color Map", 
-        ["YlGnBu", "viridis", "plasma", "inferno", "magma", "cividis", "Blues", "Greens", "Reds"],
-        help="Color map for the heatmap"
-    )
-    
     # Statistical significance parameters
     significance_level = st.sidebar.slider(
         "Significance Level", 
@@ -444,12 +425,6 @@ def render_packing_week_heatmap_params():
         "Minimum Effect Size (%)", 
         0.5, 10.0, 2.5, 0.5,
         help="Minimum percentage point difference for significance"
-    )
-    
-    top_n = st.sidebar.slider(
-        "Top N Columns", 
-        5, 30, 15, 1,
-        help="Number of top columns to show (others are grouped)"
     )
     
     # Button to generate visualisation
@@ -476,66 +451,20 @@ def render_concentration_bubble_params():
     
     # Variables for concentration measurement
     secondary_variables = [
-        "buyer_id", "seller_id", "target_country", "local_market", "production_region"
+        "buyer_id", "target_country"
     ]
-    
-    # Initialize session state tracking variables with different keys than the widget keys
-    if "bubble_primary_var_value" not in st.session_state:
-        st.session_state.bubble_primary_var_value = "commodity_name"
-    if "bubble_secondary_var_value" not in st.session_state:
-        st.session_state.bubble_secondary_var_value = "buyer_id"
-    
-    # Function to update the secondary variable when primary changes
-    def on_primary_change():
-        primary_var = st.session_state.bubble_primary_var
-        
-        # If the selected primary matches the current secondary, change the secondary
-        if primary_var == st.session_state.bubble_secondary_var_value:
-            # Find a variable that's not the selected primary
-            available_secondary = [var for var in secondary_variables if var != primary_var]
-            if available_secondary:
-                st.session_state.bubble_secondary_var_value = available_secondary[0]
-        
-        # Always update our tracking variable
-        st.session_state.bubble_primary_var_value = primary_var
-    
-    # Function to update the primary variable when secondary changes
-    def on_secondary_change():
-        secondary_var = st.session_state.bubble_secondary_var
-        
-        # If the selected secondary matches the current primary, change the primary
-        if secondary_var == st.session_state.bubble_primary_var_value:
-            # Find a variable that's not the selected secondary
-            available_primary = [var for var in primary_variables if var != secondary_var]
-            if available_primary:
-                st.session_state.bubble_primary_var_value = available_primary[0]
-        
-        # Always update our tracking variable
-        st.session_state.bubble_secondary_var_value = secondary_var
-
     # Select entity parameters
     entity1_col = st.sidebar.selectbox(
         "Primary Variable (Grouping)", 
         primary_variables,
-        index=primary_variables.index(st.session_state.bubble_primary_var_value),
         key="bubble_primary_var",
-        on_change=on_primary_change,
         help="Main grouping variable"
     )
     
-    # Create filtered list of secondary variables (excluding the primary)
-    available_secondary_vars = [var for var in secondary_variables if var != entity1_col]
-    
-    # If the current secondary value is not in available_secondary_vars, reset it to the first available
-    if st.session_state.bubble_secondary_var_value not in available_secondary_vars and available_secondary_vars:
-        st.session_state.bubble_secondary_var_value = available_secondary_vars[0]
-    
     entity2_col = st.sidebar.selectbox(
         "Secondary Variable (Concentration)", 
-        available_secondary_vars,
-        index=available_secondary_vars.index(st.session_state.bubble_secondary_var_value) if st.session_state.bubble_secondary_var_value in available_secondary_vars else 0,
+        secondary_variables,
         key="bubble_secondary_var",
-        on_change=on_secondary_change,
         help="Variable to measure concentration for"
     )
     
@@ -554,25 +483,6 @@ def render_concentration_bubble_params():
     else:  # revenue
         value_col = "income"
     
-    # Visualization parameters
-    title = st.sidebar.text_input(
-        "Title", 
-        f"{entity2_col.replace('_', ' ').title()} Concentration by {entity1_col.replace('_', ' ').title()}",
-        help="Title for the bubble plot"
-    )
-    
-    min_pallets = st.sidebar.slider(
-        "Minimum Pallets", 
-        0, 50, 10, 5,
-        help="Minimum number of pallets for inclusion"
-    )
-    
-    label_threshold = st.sidebar.slider(
-        "Label Threshold", 
-        0.01, 0.2, 0.05, 0.01,
-        help="Threshold for showing labels (% of max)"
-    )
-    
     # Button to generate visualisation
     generate_viz = st.sidebar.button("Generate Concentration Bubble Plot")
 
@@ -581,27 +491,24 @@ def render_concentration_bubble_params():
         "entity2_col": entity2_col,
         "value_col": value_col,
         "measure": measure,
-        "title": title,
-        "min_pallets": min_pallets,
-        "label_threshold": label_threshold,
     }, generate_viz
 
 
-def render_data_preview(cg_df, expanded=True):
+def render_data_preview(df, expanded=True):
     """Render a preview of the loaded data."""
     with st.expander("Data preview", expanded=expanded):
-        if cg_df is not None:
+        if df is not None:
             # Display data stats from the aggregated dataframe
             col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric("Total Carton Groupings", len(cg_df))
+                st.metric("Total Carton Groupings", sum(df['n_cg']))
             with col2:
-                st.metric("Unique Buyers", cg_df["buyer_id"].nunique())
+                st.metric("Unique Buyers", df["buyer_id"].nunique())
             with col3:
-                st.metric("Unique Sellers", cg_df["seller_id"].nunique())
+                st.metric("Unique Sellers", df["seller_id"].nunique())
 
             # Show both aggregated data and raw preview
             st.subheader("Carton Grouping Data")
-            st.dataframe(cg_df.head(5))
+            st.dataframe(df.head(5))
         else:
             st.error("Data not loaded. Please load the data to view the preview.") 

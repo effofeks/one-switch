@@ -49,16 +49,16 @@ def anim_to_html(anim):
         return None
 
 
-def get_strong_connection_focal_info(agg_df, rank=1, measure="containers"):
+def get_strong_connection_focal_info(df, rank=1, measure="containers"):
     """Extract the focal edge information from the strong connections data"""
-    # Check if agg_df is None
-    if agg_df is None:
+    # Check if df is None
+    if df is None:
         return None
         
     # Prepare the weighted edges dataframe - must exactly match the logic in visualize_strong_connections
     if measure == "containers":
         weighted_edges_df = (
-            agg_df.dropna(subset=["buyer_id", "seller_id", "container_number"])
+            df.dropna(subset=["buyer_id", "seller_id", "container_number"])
             .groupby(["buyer_id", "seller_id"])["container_number"]
             .nunique()  # Count distinct containers
             .reset_index()
@@ -67,7 +67,7 @@ def get_strong_connection_focal_info(agg_df, rank=1, measure="containers"):
         )
     elif measure == "std_cartons":
         weighted_edges_df = (
-            agg_df.dropna(subset=["buyer_id", "seller_id", "std_cartons"])
+            df.dropna(subset=["buyer_id", "seller_id", "std_cartons"])
             .groupby(["buyer_id", "seller_id"])["std_cartons"]
             .sum()
             .reset_index()
@@ -76,7 +76,7 @@ def get_strong_connection_focal_info(agg_df, rank=1, measure="containers"):
         )
     else:  # measure == 'revenue'
         weighted_edges_df = (
-            agg_df.dropna(subset=["buyer_id", "seller_id", "income"])
+            df.dropna(subset=["buyer_id", "seller_id", "income"])
             .groupby(["buyer_id", "seller_id"])["income"]
             .sum()
             .reset_index()
@@ -97,7 +97,7 @@ def get_strong_connection_focal_info(agg_df, rank=1, measure="containers"):
     }
 
 
-def create_weighted_graph(agg_df, measure="containers"):
+def create_weighted_graph(df, measure="containers"):
     """Create a weighted graph from network data based on the specified measure."""
     # Create an undirected graph for ALL measures
     G = nx.Graph()
@@ -105,7 +105,7 @@ def create_weighted_graph(agg_df, measure="containers"):
     # Prepare edges based on measure
     if measure == "containers":
         edges_df = (
-            agg_df.dropna(subset=["buyer_id", "seller_id", "container_number"])
+            df.dropna(subset=["buyer_id", "seller_id", "container_number"])
             .groupby(["buyer_id", "seller_id"])["container_number"]
             .nunique()
             .reset_index()
@@ -113,7 +113,7 @@ def create_weighted_graph(agg_df, measure="containers"):
         )
     elif measure == "std_cartons":
         edges_df = (
-            agg_df.dropna(subset=["buyer_id", "seller_id", "std_cartons"])
+            df.dropna(subset=["buyer_id", "seller_id", "std_cartons"])
             .groupby(["buyer_id", "seller_id"])["std_cartons"]
             .sum()
             .reset_index()
@@ -121,7 +121,7 @@ def create_weighted_graph(agg_df, measure="containers"):
         )
     else:  # revenue
         edges_df = (
-            agg_df.dropna(subset=["buyer_id", "seller_id", "income"])
+            df.dropna(subset=["buyer_id", "seller_id", "income"])
             .groupby(["buyer_id", "seller_id"])["income"]
             .sum()
             .reset_index()
@@ -400,9 +400,7 @@ Top 5 strongest connections ({weight_label}):
                 "Column Variable": params.get("col_col", params.get("y_axis", "")).replace("_", " ").title(),
                 "Measure": params.get("measure", params.get("color_by", "containers")).title(),
                 "Normalize Rows": "Yes" if params.get("normalize_rows") else "No",
-                "Color Map": params.get("cmap", "YlGnBu"),
                 "Significance Level": str(params.get("significance_level", 0.05)),
-                "Top N Columns": str(params.get("top_n", 15)),
             }
             
     elif display_viz_type in ["Concentration Bubble Plot", "concentration_bubble"]:
@@ -412,8 +410,6 @@ Top 5 strongest connections ({weight_label}):
                 "Primary Variable": params.get("entity1_col", "").replace("_", " ").title(),
                 "Secondary Variable": params.get("entity2_col", "").replace("_", " ").title(),
                 "Measure": params.get("measure", params.get("color_by", "containers")).title(),
-                "Minimum Pallets": str(params.get("min_pallets", 0)),
-                "Label Threshold": str(params.get("label_threshold", 0)),
             }
             
             # Add an explanation of HHI
@@ -620,7 +616,7 @@ def format_stats(visualization):
         
     viz_type = visualization["type"]
     params = visualization["params"]
-    result_df = visualization["result_df"]
+    # result_df = visualization["result_df"]
     graph = visualization["graph"]
     metadata = visualization["metadata"]
     
@@ -630,10 +626,10 @@ def format_stats(visualization):
         full_graph = metadata.get("full_graph")
         return format_network_stats(graph, viz_type, params, focal_info, full_graph)
     
-    elif viz_type in ["heatmap", "packing_week_heatmap"]:
-        return format_heatmap_stats(result_df, viz_type, params)
+    # elif viz_type in ["heatmap", "packing_week_heatmap"]:
+    #     return format_heatmap_stats(result_df, viz_type, params)
     
-    elif viz_type == "concentration_bubble":
-        return format_bubble_stats(result_df, params)
+    # elif viz_type == "concentration_bubble":
+    #     return format_bubble_stats(result_df, params)
     
     return None 
