@@ -1,53 +1,11 @@
 import networkx as nx
 import matplotlib.pyplot as plt
 import numpy as np
-from pathlib import Path
-from dotenv import load_dotenv
-from sqlalchemy import URL
 from matplotlib.animation import FuncAnimation
 
 
-
-
-
-load_dotenv()
-
-DB_URL = URL.create(
-    drivername="postgresql",
-    username="warehouse",
-    password="warehouse",
-    host="localhost",
-    port=8432,
-    database="warehouse",
-)
-
-# DB_URL = f"postgresql://{os.environ['DBT_DEV_USER']}:{os.environ['DBT_DEV_PASSWORD']}@{os.environ['DBT_DEV_HOST']}:5432/postgres"
-
-SCRIPTS_PATH = Path("scripts")
-OUTPUT_PATH = Path("output")
-
-
-CG_COL_TYPES = {
-    "id": "Int64",
-    "pallet_number": str,
-    "container_number": str,
-    "seller_id": "Int64",
-    "buyer_id": "Int64",
-}
-
-FIN_COL_TYPES = {
-    "cg_id": "Int64",
-    "cost_type": str,
-    "currency": str,
-    "cgt_amount": "Float64",
-    "document_type": str,
-    "exchange_rate": "Float64",
-    "payment_status": str,
-}
-
-
 def visualize_strong_connections(
-    agg_df,
+    df,
     rank=1,
     measure="containers",
     degree=1,
@@ -61,7 +19,7 @@ def visualize_strong_connections(
 
     Parameters:
     -----------
-    agg_df : pandas DataFrame
+    df : pandas DataFrame
         The dataframe containing the network data
     rank : int
         The rank of the edge to focus on (1 = strongest, 2 = second strongest, etc.)
@@ -85,7 +43,9 @@ def visualize_strong_connections(
 
     # Validate measure parameter
     if measure not in ["containers", "std_cartons", "revenue"]:
-        raise ValueError("measure must be either 'containers', 'std_cartons', or 'revenue'")
+        raise ValueError(
+            "measure must be either 'containers', 'std_cartons', or 'revenue'"
+        )
 
     # Validate rank parameter
     if not isinstance(rank, int) or rank < 1:
@@ -94,7 +54,7 @@ def visualize_strong_connections(
     # Prepare the weighted edges dataframe
     if measure == "containers":
         weighted_edges_df = (
-            agg_df.dropna(subset=["buyer_id", "seller_id", "container_number"])
+            df.dropna(subset=["buyer_id", "seller_id", "container_number"])
             .groupby(["buyer_id", "seller_id"])["container_number"]
             .nunique()  # Count distinct containers
             .reset_index()
@@ -104,7 +64,7 @@ def visualize_strong_connections(
         weight_label = "containers"
     elif measure == "std_cartons":  # measure == 'std_cartons'
         weighted_edges_df = (
-            agg_df.dropna(subset=["buyer_id", "seller_id", "std_cartons"])
+            df.dropna(subset=["buyer_id", "seller_id", "std_cartons"])
             .groupby(["buyer_id", "seller_id"])["std_cartons"]
             .sum()
             .reset_index()
@@ -114,7 +74,7 @@ def visualize_strong_connections(
         weight_label = "std_cartons"
     else:  # measure == 'revenue'
         weighted_edges_df = (
-            agg_df.dropna(subset=["buyer_id", "seller_id", "income"])
+            df.dropna(subset=["buyer_id", "seller_id", "income"])
             .groupby(["buyer_id", "seller_id"])["income"]
             .sum()
             .reset_index()
@@ -285,7 +245,10 @@ def visualize_strong_connections(
     )
 
     # Add edge labels with weights
-    edge_labels = {(u, v): f"{int(d['weight']):,}".replace(",", " ") for u, v, d in subgraph.edges(data=True)}
+    edge_labels = {
+        (u, v): f"{int(d['weight']):,}".replace(",", " ")
+        for u, v, d in subgraph.edges(data=True)
+    }
     nx.draw_networkx_edge_labels(subgraph, pos, edge_labels=edge_labels, font_size=8)
 
     # Update title with formatted weight
@@ -336,7 +299,7 @@ def visualize_strong_connections(
     # # Format total weights with thousand separators
     # formatted_node1_weight = f"{int(node1_total_weight):,}".replace(",", " ")
     # formatted_node2_weight = f"{int(node2_total_weight):,}".replace(",", " ")
-    
+
     # print(f"\nTotal {weight_label} for {node1}: {formatted_node1_weight}")
     # print(f"Total {weight_label} for {node2}: {formatted_node2_weight}")
 
@@ -353,14 +316,22 @@ def visualize_strong_connections(
     #         print(f"  - {neighbor}")
 
 
-def visualize_company_network(agg_df, company_id, measure='containers', degree=1, 
-                              layout='spring', spacing=1.5, iterations=100, figsize=(14, 10)):
+def visualize_company_network(
+    df,
+    company_id,
+    measure="containers",
+    degree=1,
+    layout="spring",
+    spacing=1.5,
+    iterations=100,
+    figsize=(14, 10),
+):
     """
     Visualize a network centered around a specific company (buyer or seller).
-    
+
     Parameters:
     -----------
-    agg_df : pandas DataFrame
+    df : pandas DataFrame
         The dataframe containing the network data
     company_id : int or str
         The ID of the company to focus on (will match to buyer_id or seller_id)
@@ -376,7 +347,7 @@ def visualize_company_network(agg_df, company_id, measure='containers', degree=1
         Number of iterations for force-directed layouts (higher values may give better results but take longer)
     figsize : tuple
         Figure size as (width, height) in inches
-        
+
     Returns:
     --------
     None, displays a plot
@@ -384,22 +355,26 @@ def visualize_company_network(agg_df, company_id, measure='containers', degree=1
     import networkx as nx
     import matplotlib.pyplot as plt
     import numpy as np
-    
+
     # Validate measure parameter
-    if measure not in ['containers', 'std_cartons', 'revenue']:
-        raise ValueError("measure must be either 'containers', 'std_cartons', or 'revenue'")
-    
+    if measure not in ["containers", "std_cartons", "revenue"]:
+        raise ValueError(
+            "measure must be either 'containers', 'std_cartons', or 'revenue'"
+        )
+
     # Check if company_id exists in the data
-    is_buyer = company_id in agg_df['buyer_id'].values
-    is_seller = company_id in agg_df['seller_id'].values
-    
+    is_buyer = company_id in df["buyer_id"].values
+    is_seller = company_id in df["seller_id"].values
+
     if not (is_buyer or is_seller):
-        raise ValueError(f"Company ID {company_id} not found as either buyer or seller in the data")
-    
+        raise ValueError(
+            f"Company ID {company_id} not found as either buyer or seller in the data"
+        )
+
     # Prepare the weighted edges dataframe
-    if measure == 'containers':
+    if measure == "containers":
         weighted_edges_df = (
-            agg_df.dropna(subset=["buyer_id", "seller_id", "container_number"])
+            df.dropna(subset=["buyer_id", "seller_id", "container_number"])
             .groupby(["buyer_id", "seller_id"])["container_number"]
             .nunique()  # Count distinct containers
             .reset_index()
@@ -407,9 +382,9 @@ def visualize_company_network(agg_df, company_id, measure='containers', degree=1
             .sort_values("weight", ascending=False)
         )
         weight_label = "containers"
-    elif measure == 'std_cartons':  # measure == 'std_cartons'
+    elif measure == "std_cartons":  # measure == 'std_cartons'
         weighted_edges_df = (
-            agg_df.dropna(subset=["buyer_id", "seller_id", "std_cartons"])
+            df.dropna(subset=["buyer_id", "seller_id", "std_cartons"])
             .groupby(["buyer_id", "seller_id"])["std_cartons"]
             .sum()
             .reset_index()
@@ -419,7 +394,7 @@ def visualize_company_network(agg_df, company_id, measure='containers', degree=1
         weight_label = "std_cartons"
     else:  # measure == 'revenue'
         weighted_edges_df = (
-            agg_df.dropna(subset=["buyer_id", "seller_id", "income"])
+            df.dropna(subset=["buyer_id", "seller_id", "income"])
             .groupby(["buyer_id", "seller_id"])["income"]
             .sum()
             .reset_index()
@@ -427,89 +402,96 @@ def visualize_company_network(agg_df, company_id, measure='containers', degree=1
             .sort_values("weight", ascending=False)
         )
         weight_label = "revenue"
-    
+
     # Create a weighted graph
     weighted_G = nx.Graph()
-    
+
     # Add weighted edges to the graph
     for _, row in weighted_edges_df.iterrows():
-        weighted_G.add_edge(
-            row["buyer_id"], 
-            row["seller_id"], 
-            weight=row["weight"]
-        )
-    
+        weighted_G.add_edge(row["buyer_id"], row["seller_id"], weight=row["weight"])
+
     # Check if company_id exists in the graph
     if company_id not in weighted_G.nodes():
         raise ValueError(f"Company ID {company_id} has no connections in the graph")
-    
+
     # Get nodes to include in the subgraph based on degree
     subgraph_nodes = {company_id}
     current_frontier = {company_id}
-    
+
     for d in range(degree):
         next_frontier = set()
         for node in current_frontier:
             next_frontier.update(weighted_G.neighbors(node))
         subgraph_nodes.update(next_frontier)
         current_frontier = next_frontier
-    
+
     # Create the subgraph
     subgraph = weighted_G.subgraph(subgraph_nodes)
-    
+
     # Plot the subgraph
     plt.figure(figsize=figsize)
-    
+
     # Choose layout based on parameter
-    if layout == 'spring':
+    if layout == "spring":
         pos = nx.spring_layout(subgraph, seed=42, k=spacing, iterations=iterations)
-    elif layout == 'kamada_kawai':
+    elif layout == "kamada_kawai":
         pos = nx.kamada_kawai_layout(subgraph)
-    elif layout == 'fruchterman_reingold':
-        pos = nx.fruchterman_reingold_layout(subgraph, seed=42, k=spacing, iterations=iterations)
-    elif layout == 'spectral':
+    elif layout == "fruchterman_reingold":
+        pos = nx.fruchterman_reingold_layout(
+            subgraph, seed=42, k=spacing, iterations=iterations
+        )
+    elif layout == "spectral":
         pos = nx.spectral_layout(subgraph)
-    elif layout == 'circular':
+    elif layout == "circular":
         pos = nx.circular_layout(subgraph)
     else:
         # Default to spring layout
         pos = nx.spring_layout(subgraph, seed=42, k=spacing, iterations=iterations)
-    
+
     # Apply spacing factor
-    if layout != 'kamada_kawai':  # Kamada-Kawai already handles spacing well
-        pos = {node: (coords[0] * spacing, coords[1] * spacing) for node, coords in pos.items()}
-    
+    if layout != "kamada_kawai":  # Kamada-Kawai already handles spacing well
+        pos = {
+            node: (coords[0] * spacing, coords[1] * spacing)
+            for node, coords in pos.items()
+        }
+
     # Get edge weights for line thickness
-    max_edge_weight = weighted_edges_df['weight'].max()
+    max_edge_weight = weighted_edges_df["weight"].max()
     edge_weights = [
-        subgraph[u][v]['weight'] / max_edge_weight * 10 
-        for u, v in subgraph.edges()
+        subgraph[u][v]["weight"] / max_edge_weight * 10 for u, v in subgraph.edges()
     ]
-    
+
     # Determine node colors and sizes
     node_colors = []
     node_sizes = []
-    
+
     for node in subgraph.nodes():
         # Set node size based on importance
         if node == company_id:
             node_sizes.append(1200)  # Main node is larger
         else:
             # Calculate distance from main node
-            distance_to_main = nx.shortest_path_length(subgraph, source=node, target=company_id, weight=None)
-            node_sizes.append(800 - (distance_to_main * 150))  # Size decreases with distance
-        
+            distance_to_main = nx.shortest_path_length(
+                subgraph, source=node, target=company_id, weight=None
+            )
+            node_sizes.append(
+                800 - (distance_to_main * 150)
+            )  # Size decreases with distance
+
         # Set node color based on type and importance
         if node == company_id:
             node_colors.append("yellow")  # Main node is yellow as specified
         else:
-            if node in weighted_edges_df["buyer_id"].values and node in weighted_edges_df["seller_id"].values:
+            if (
+                node in weighted_edges_df["buyer_id"].values
+                and node in weighted_edges_df["seller_id"].values
+            ):
                 node_colors.append("purple")  # Both buyer and seller
             elif node in weighted_edges_df["buyer_id"].values:
                 node_colors.append("red")  # Buyer only
             else:
                 node_colors.append("green")  # Seller only
-    
+
     # Draw the graph with weighted edges
     nx.draw(
         subgraph,
@@ -522,62 +504,68 @@ def visualize_company_network(agg_df, company_id, measure='containers', degree=1
         # width=edge_weights,
         alpha=0.8,
     )
-    
+
     # Add edge labels with weights as integers with thousand separators
-    edge_labels = {(u, v): f"{int(d['weight']):,}".replace(",", " ") for u, v, d in subgraph.edges(data=True)}
-    nx.draw_networkx_edge_labels(
-        subgraph, 
-        pos, 
-        edge_labels=edge_labels, 
-        font_size=8
-    )
-    
+    edge_labels = {
+        (u, v): f"{int(d['weight']):,}".replace(",", " ")
+        for u, v, d in subgraph.edges(data=True)
+    }
+    nx.draw_networkx_edge_labels(subgraph, pos, edge_labels=edge_labels, font_size=8)
+
     # Create a title for the plot
     company_type = []
-    if is_buyer: company_type.append("Buyer")
-    if is_seller: company_type.append("Seller")
+    if is_buyer:
+        company_type.append("Buyer")
+    if is_seller:
+        company_type.append("Seller")
     company_type_str = " & ".join(company_type)
-    
-    plt.title(f"Network for Company {company_id} ({company_type_str})\n"
-              f"Showing Degree {degree} Neighbors with {weight_label.capitalize()} as Edge Weights")
-    
+
+    plt.title(
+        f"Network for Company {company_id} ({company_type_str})\n"
+        f"Showing Degree {degree} Neighbors with {weight_label.capitalize()} as Edge Weights"
+    )
+
     # Add a legend
     import matplotlib.patches as mpatches
-    
+
     legend_elements = [
-        mpatches.Patch(color='yellow', label=f'Focus Company ({company_id})'),
-        mpatches.Patch(color='red', label='Buyers'),
-        mpatches.Patch(color='green', label='Sellers'),
-        mpatches.Patch(color='purple', label='Both Buyer & Seller')
+        mpatches.Patch(color="yellow", label=f"Focus Company ({company_id})"),
+        mpatches.Patch(color="red", label="Buyers"),
+        mpatches.Patch(color="green", label="Sellers"),
+        mpatches.Patch(color="purple", label="Both Buyer & Seller"),
     ]
-    
-    plt.legend(handles=legend_elements, loc='upper right')
+
+    plt.legend(handles=legend_elements, loc="upper right")
     plt.show()
-    
+
     # # Print network statistics
     # print(f"\nNetwork Statistics for Company {company_id} ({company_type_str}):")
     # print(f"Number of nodes in network: {len(subgraph.nodes())}")
     # print(f"Number of connections: {len(subgraph.edges())}")
-    
+
     # Calculate direct connections
     direct_neighbors = list(weighted_G.neighbors(company_id))
     # direct_buyer_count = sum(1 for n in direct_neighbors if n in weighted_edges_df["buyer_id"].values)
     # direct_seller_count = sum(1 for n in direct_neighbors if n in weighted_edges_df["seller_id"].values)
-    
+
     # print(f"\nDirect connections: {len(direct_neighbors)}")
     # print(f"  - Buyers: {direct_buyer_count}")
     # print(f"  - Sellers: {direct_seller_count}")
-    
+
     # Calculate total weight
-    total_weight = sum(weighted_G[company_id][neighbor]['weight'] for neighbor in direct_neighbors)
+    total_weight = sum(
+        weighted_G[company_id][neighbor]["weight"] for neighbor in direct_neighbors
+    )
     # formatted_total_weight = f"{int(total_weight):,}".replace(",", " ")
     # print(f"\nTotal {weight_label}: {formatted_total_weight}")
-    
+
     # Find strongest connections
-    connection_weights = [(neighbor, weighted_G[company_id][neighbor]['weight']) 
-                         for neighbor in direct_neighbors]
+    connection_weights = [
+        (neighbor, weighted_G[company_id][neighbor]["weight"])
+        for neighbor in direct_neighbors
+    ]
     connection_weights.sort(key=lambda x: x[1], reverse=True)
-    
+
     if connection_weights:
         # print(f"\nTop 5 strongest connections:")
         for i, (neighbor, weight) in enumerate(connection_weights[:5]):
@@ -587,41 +575,32 @@ def visualize_company_network(agg_df, company_id, measure='containers', degree=1
             if neighbor in weighted_edges_df["seller_id"].values:
                 neighbor_type.append("Seller")
             neighbor_type_str = " & ".join(neighbor_type)
-            
+
             formatted_weight = f"{int(weight):,}".replace(",", " ")
             # print(f"{i+1}. {neighbor} ({neighbor_type_str}): {formatted_weight} {weight_label}")
 
 
 def create_network_timelapse(
-    agg_df,
-    output_path=None,
+    df,
     interval=1500,
-    fps=1,
     figsize=(12, 8),
     seed=42,
-    save_format="gif",
 ):
     """
     Create an animation showing the network evolution over time by packing week.
-    
+
     Parameters:
     -----------
-    agg_df : pandas DataFrame
+    df : pandas DataFrame
         DataFrame containing network data with columns: buyer_id, seller_id, packing_week, container_number
         Must be pre-filtered to remove null values.
-    output_path : str or Path, optional
-        Path to save the animation. If None, the animation is returned instead of saved.
     interval : int, default=1500
         Milliseconds between frames for the animation display
-    fps : int, default=1
-        Frames per second for the saved animation file
     figsize : tuple, default=(12, 8)
         Figure size as (width, height) in inches
     seed : int, default=42
         Random seed for layout generation
-    save_format : str, default="gif"
-        Format to save the animation (e.g., 'gif', 'mp4')
-        
+
     Returns:
     --------
     animation : FuncAnimation
@@ -629,12 +608,12 @@ def create_network_timelapse(
     """
 
     # Get the unique weeks in sorted order
-    unique_weeks = sorted(agg_df["packing_week"].unique())
-    
+    unique_weeks = sorted(df["packing_week"].unique())
+
     # Create a function to build a graph for a specific week
     def build_graph_for_week(week):
         # Filter the DataFrame for the specific week
-        week_df = agg_df[agg_df["packing_week"] == week]
+        week_df = df[df["packing_week"] == week]
 
         # Create a DataFrame with unique buyer-seller pairs for this week
         week_pairs = (
@@ -680,13 +659,13 @@ def create_network_timelapse(
     # Use a consistent layout across frames to maintain node positions
     # First, create a combined graph from all weeks to compute a consistent layout
     combined_graph = nx.Graph()
-    for week, graph in week_graphs.items():
+    for _, graph in week_graphs.items():
         combined_graph.add_edges_from(graph.edges())
 
     pos = nx.spring_layout(combined_graph, seed=seed)
 
     # Function to get weekly statistics
-    def get_week_stats(week, graph, week_df):
+    def get_week_stats(graph, week_df):
         # Count unique sellers and buyers
         unique_sellers = week_df["seller_id"].nunique()
         unique_buyers = week_df["buyer_id"].nunique()
@@ -752,7 +731,7 @@ def create_network_timelapse(
         week_df = week_dfs[week]
 
         # Calculate weekly statistics
-        stats = get_week_stats(week, week_graphs[week], week_df)
+        stats = get_week_stats(week_graphs[week], week_df)
 
         # Use the pre-computed positions, filtering for nodes in the current graph
         current_pos = {node: pos[node] for node in G.nodes() if node in pos}
@@ -768,12 +747,9 @@ def create_network_timelapse(
         # Determine node colors: red for buyers, green for sellers
         node_colors = []
         for node in G.nodes():
-            if (
-                node in agg_df["buyer_id"].values
-                and node in agg_df["seller_id"].values
-            ):
+            if node in df["buyer_id"].values and node in df["seller_id"].values:
                 node_colors.append("purple")  # Both buyer and seller
-            elif node in agg_df["buyer_id"].values:
+            elif node in df["buyer_id"].values:
                 node_colors.append("red")  # Buyer only
             else:
                 node_colors.append("green")  # Seller only
@@ -822,10 +798,8 @@ def create_network_timelapse(
     ani = FuncAnimation(
         fig, update, frames=len(unique_weeks), interval=interval, blit=False
     )
-    
-    
+
     # Close the static figure to prevent duplicate display
     plt.close()
-    
-    return ani
 
+    return ani

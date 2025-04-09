@@ -1,286 +1,8 @@
 import datetime
 import pandas as pd
-import numpy as np
-
-
-# imports
-import os
-import sqlalchemy
-from pathlib import Path
-from dotenv import load_dotenv
-from sqlalchemy import URL
-
 import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-from matplotlib.animation import FuncAnimation
-from IPython.display import HTML
-from collections import Counter
-import seaborn as sns
 
-import pandas as pd
-import numpy as np
-import os
-import sqlalchemy
-from pathlib import Path
-from dotenv import load_dotenv
-from sqlalchemy.dialects import postgresql
-from sqlalchemy import URL
-
-import matplotlib.dates as mdates
-import geopandas as gpd
 from matplotlib.colors import LinearSegmentedColormap
-from scipy import stats
-
-from matplotlib.backends.backend_pdf import PdfPages
-
-
-load_dotenv()
-# constants
-DB_URL = URL.create(
-    drivername="postgresql",
-    username="warehouse",
-    password="warehouse",
-    host="localhost",
-    port=8432,
-    database="warehouse",
-)
-
-# DB_URL = f"postgresql://{os.environ['DBT_DEV_USER']}:{os.environ['DBT_DEV_PASSWORD']}@{os.environ['DBT_DEV_HOST']}:5432/postgres"
-
-SCRIPTS_PATH = Path("scripts")
-DATA_PATH = Path("data")
-OUTPUT_CG_PATH = Path("output/cg-analysis")
-OUTPUT_NET_PATH = Path("output/network-analysis")
-
-
-CG_COL_TYPES = {
-    "id": "Int64",
-    "line_item_id": "Int64",
-    "order_id": "Int64",
-    "state": str,
-    "pallet_number": str,
-    "sequence_number": "Int64",
-    "exporter_code": str,
-    "farm_code": str,
-    "packhouse_code": str,
-    "production_region": str,
-    "commodity_name": str,
-    "variety_name": str,
-    "cartons": "Int64",
-    "pallet_stack": str,
-    "pack": str,
-    "size_count": str,
-    "size_categorization": str,
-    "grade": str,
-    "orchard": str,
-    "net_mass": "Float64",
-    "container_number": str,
-    "mark": str,
-    "local_market": str,
-    "jbin": str,
-    "target_market": str,
-    "target_region": str,
-    "target_country": str,
-    "pallet_gross_mass": "Float64",
-    "seller_id": "Int64",
-    "seller_types": str,
-    "buyer_id": "Int64",
-    "buyer_types": str,
-    "packing_week": str,
-    "batch_number": str,
-    "inventory_code": str,
-    "consignment_number": str,
-    "pallet_rejected": "bool",
-    "commercial_term_id": "Int64",
-    "advance_price": "Float64",
-    "final_price": "Float64",
-    "currency": str,
-    "transport_type": str,
-}
-
-LI_COL_TYPES = {
-    "id": "Int64",
-    "quantity": "Float64",
-    "quantity_unit": str,
-    "price_minor_unit": "Int64",
-    "price_unit": str,
-    "currency": str,
-    "pack": str,
-    "price_term": str,
-    "additional_fields": str,
-    "pallet_stack": str,
-    "unlimited": "bool",
-    "target_market": str,
-    "target_region": str,
-    "target_country": str,
-    "packing_week": str,
-    "incoterm": str,
-    "deleted": "bool",
-    "grade": str,
-    "state": str,
-    "line_item_grouping_id": "Int64",
-    "rank": "Int64",
-    "batch_number": str,
-    "inventory_code": str,
-    "planned_quantity": "Float64",
-    "planned_quantity_unit": str,
-    "size_counts": str,
-}
-
-PT_COL_TYPES = {
-    "cg_id": "Int64",
-    "line_item_id": "Int64",
-    "container_id": "Int64",
-    "state": str,
-    "local_market": str,
-    "steri_market": str,
-    "jbin": str,
-    "tradelane": str,
-    "ls_tradelane": str,
-    "ss_tradelane": str,
-    "std_cartons": "Float64",
-    "enter_packhouse": str,
-    "packhouse_dwell": "Float64",
-    "exit_packhouse": str,
-    "dispatch_dwell": "Float64",
-    "enter_coldstore": str,
-    "cs_fbo_code": str,
-    "cold_store_dwell": "Float64",
-    "exit_coldstore": str,
-    "current_coldstore": str,
-    "cs_to_gi_dwell": "Float64",
-    "origin_port_id": "Int64",
-    "origin_port": str,
-    "gi_to_load_dwell": "Float64",
-    "load_vessel": str,
-    "load_to_dpl_dwell": "Float64",
-    "dpl_voyage": str,
-    "dpl_to_adp_dwell": "Float64",
-    "destination_port": str,
-    "destination_port_country_code": str,
-    "discharge_to_gate_out_dwell": "Float64",
-}
-
-FIN_COL_TYPES = {
-    "invoice_line_item_id": "Int64",
-    "cg_id": "Int64",
-    "company_id": "Int64",
-    "document_type": str,
-    "invoice_id": "Int64",
-    "cost_type": str,
-    "ili_price_minor_unit": "Float64",
-    "currency": str,
-    "price_unit": str,
-    "cgt_amount": "Float64",
-    "is_actual": "bool",
-    "order_price": "Float64",
-    "order_price_per_carton": "Float64",
-    "order_price_unit": str,
-    "order_currency": str,
-    "ct_advance_amount_per_carton": "Float64",
-    "ct_advance_currency": str,
-    "ct_advance_week": str,
-    "ct_final_value": "Float64",
-    "ct_final_currency": str,
-    "ct_advance_credit_term": str,
-    "ct_final_credit_term": str,
-    "incoterm": str,
-    "actual_advance_currency": str,
-    "advances_exchange_rate": "Float64",
-    "actual_advance": "Float64",
-    "advance_transaction_week": str,
-    "actual_advance_zar": "Float64",
-    "actual_final_currency": str,
-    "finals_exchange_rate": "Float64",
-    "actual_final": "Float64",
-    "actual_final_zar": "Float64",
-    "actual_final_per_pallet": "Float64",
-    "actual_final_per_carton": "Float64",
-    "total_value_per_pallet": "Float64",
-    "final_transaction_week": str,
-    "total_value_per_carton": "Float64",
-    "exchange_rate": "Float64",
-    "payment_status": str,
-    "account_type": str,
-}
-
-FIN_ADOPTION_COL_TYPES = {
-    "packing_week": str,
-    "commodity_group": str,
-    "total_cgs": "Int64",
-    "finance_cgs": "Int64",
-    "prop_finance_cgs": "Float64",
-}
-
-CG_DATETYPE_COLS = [
-    "advance_due_date",
-    "final_due_date",
-    "packed_datetime",
-    "first_event_datetime",
-]
-
-PT_DATETYPE_COLS = [
-    "packed_datetime",
-    "departed_packhouse_date",
-    "enter_cs_date",
-    "exit_cs_date",
-    "gate_in_date",
-    "load_date",
-    "dpl_date",
-    "adp_date",
-    "discharge_date",
-    "gate_out_date",
-]
-
-FIN_DATETYPE_COLS = [
-    "stuff_date",
-    "final_due_date",
-    "advance_due_date",
-    "invoice_date",
-]
-
-# supply
-# seller side - look at carton groupings data to see which orders they could fulfull
-# future work - enquire about estimations or pre-season planning data for a more accurate data set on supply
-ASK_COL_NAMES = [
-    "seller_id",
-    "seller_types",
-    "variety_name",
-    "size_count",
-    "grade",
-    "packing_week",
-    "farm_code",
-    "orchard",
-]
-
-BID_COL_NAMES = [
-    "buyer_id",
-    "buyer_types",
-    "variety_name",
-    "size_count",
-    "grade",
-    "packing_week",
-    "target_market",
-    "target_region",
-    "target_country",
-]
-
-
-# Read SQL queries from files
-with open(SCRIPTS_PATH / "carton_groupings.sql", "r") as f:
-    cg_query = f.read()
-
-with open(SCRIPTS_PATH / "line_items.sql", "r") as f:
-    li_query = f.read()
-
-with open(SCRIPTS_PATH / "pallet_timeline.sql", "r") as f:
-    pt_query = f.read()
-
-with open(SCRIPTS_PATH / "dso_finance.sql", "r") as f:
-    fin_query = f.read()
-
-with open(SCRIPTS_PATH / "finance_adoption.sql", "r") as f:
-    fin_adoption_query = f.read()
 
 
 def create_heatmap(
@@ -345,6 +67,9 @@ def create_heatmap(
         raise ValueError(
             "measure must be either 'container_number', 'std_cartons', or 'income'"
         )
+
+    if value_col == "income":
+        filtered_df = filtered_df.dropna(subset=["income"])
 
     # Create a pivot table
     if value_col == "container_number":
@@ -421,7 +146,12 @@ def create_heatmap(
             expected_prop = weighted_avg_by_entity2[col_idx]
 
             # Handle NaN or Infinity values
-            if pd.isna(observed_prop) or pd.isna(expected_prop) or np.isinf(observed_prop) or np.isinf(expected_prop):
+            if (
+                pd.isna(observed_prop)
+                or pd.isna(expected_prop)
+                or np.isinf(observed_prop)
+                or np.isinf(expected_prop)
+            ):
                 continue
 
             # Only test if observed is higher than expected
@@ -595,8 +325,7 @@ def create_heatmap(
     viz_df = pivot_df_top.copy()
     row_sums = viz_df.sum(axis=1)
     viz_df = viz_df.div(row_sums, axis=0)
-    fmt = ".2f" 
-
+    fmt = ".2f"
 
     # Calculate appropriate figure height based on number of rows (minimum 12, increased from 10)
     # Add a multiplier to increase the overall height
@@ -668,7 +397,7 @@ def create_heatmap(
     # Calculate position for row totals (just past the end of the heatmap)
     right_pos = len(viz_df.columns)
 
-    # Add a title for the totals column    
+    # Add a title for the totals column
     if value_col == "container_number":
         s = "Total Containers"
     elif value_col == "std_cartons":
@@ -818,8 +547,7 @@ def create_heatmap_packing_week(
     filtered_df = df.dropna(subset=[row_col, col_col])
     filtered_df = filtered_df[filtered_df[row_col] != "None"]
     filtered_df = filtered_df[filtered_df[col_col] != "None"]
-    
-    
+
     # Validate measure parameter
     if value_col not in ["container_number", "std_cartons", "income"]:
         raise ValueError(
@@ -894,7 +622,12 @@ def create_heatmap_packing_week(
             expected_prop = weighted_avg_by_entity2[col_idx]
 
             # Handle NaN or Infinity values
-            if pd.isna(observed_prop) or pd.isna(expected_prop) or np.isinf(observed_prop) or np.isinf(expected_prop):
+            if (
+                pd.isna(observed_prop)
+                or pd.isna(expected_prop)
+                or np.isinf(observed_prop)
+                or np.isinf(expected_prop)
+            ):
                 continue
 
             # Only test if observed is higher than expected
@@ -1180,129 +913,162 @@ def calculate_concentration_metrics(
     --------
     pandas.DataFrame
         A dataframe with the following columns for each entity1:
-        - count of unique pallets
-        - raw HHI (formatted to 2 decimal places)
+        - aggregated measurement (container_number, std_cartons, income)
         - normalized HHI (formatted to 2 decimal places)
-        - count of distinct entity2 values
-        - entity2 with the highest pallet count
         - percentage of pallets going to the largest entity2 (formatted to 2 decimal places)
 
         The dataframe is sorted by unique_pallets in descending order.
     """
-    # Create a copy to avoid modifying the original dataframe
-    data = df.dropna(subset=[entity1_col, entity2_col])
-    data = data[data[entity1_col] != "None"]
-    data = data[data[entity2_col] != "None"]
+    import traceback
 
-    # Determine the measurement method based on value_col
-    if value_col == "container_number":
-        # Step 1: Calculate entity preferences (distribution of entity2 for each entity1)
-        entity_preferences = (
-            data.groupby([entity1_col, entity2_col])["pallet_number"]
-            .nunique()
-            .reset_index(name="pallet_count")
+    try:
+        # Debug: Check input dataframe
+        print(f"Input dataframe shape: {df.shape}")
+        print(f"Input dataframe columns: {df.columns.tolist()}")
+        print(
+            f"Entity1 column: {entity1_col}, Entity2 column: {entity2_col}, Value column: {value_col}"
         )
 
-        # Calculate the total pallet count for each entity1
-        entity1_totals = (
-            data.groupby(entity1_col)["pallet_number"]
-            .nunique()
-            .reset_index(name="total_pallets")
-        )
+        # Check if required columns exist
+        missing_cols = [
+            col
+            for col in [entity1_col, entity2_col, value_col]
+            if col not in df.columns
+        ]
+        if missing_cols:
+            raise ValueError(f"Missing required columns: {missing_cols}")
 
-        measurement_name = "pallets"
-    elif value_col == "std_cartons":
-        # Use standard cartons instead of pallet counts
-        entity_preferences = (
-            data.groupby([entity1_col, entity2_col])["std_cartons"]
-            .sum()
-            .reset_index(name="pallet_count")  # keep column name for consistency
-        )
+        # Create a copy to avoid modifying the original dataframe
+        data = df.dropna(subset=[entity1_col, entity2_col])
+        data = data[data[entity1_col] != "None"]
+        data = data[data[entity2_col] != "None"]
 
-        # Calculate the total cartons for each entity1
-        entity1_totals = (
-            data.groupby(entity1_col)["std_cartons"]
-            .sum()
-            .reset_index(name="total_pallets")  # keep column name for consistency
-        )
+        print(f"Filtered data shape: {data.shape}")
 
-        measurement_name = "cartons"
-    else:  # value_col == "income"
-        # Use revenue instead of pallet counts
-        entity_preferences = (
-            data.groupby([entity1_col, entity2_col])["income"]
-            .sum()
-            .reset_index(name="pallet_count")  # keep column name for consistency
-        )
+        if data.empty:
+            raise ValueError("No valid data after filtering")
 
-        # Calculate the total revenue for each entity1
-        entity1_totals = (
-            data.groupby(entity1_col)["income"]
-            .sum()
-            .reset_index(name="total_pallets")  # keep column name for consistency
-        )
+        # Determine the measurement method based on value_col
+        if value_col == "container_number":
+            # Step 1: Calculate entity preferences (distribution of entity2 for each entity1)
+            entity_preferences = (
+                data.groupby([entity1_col, entity2_col])["container_number"]
+                .nunique()
+                .reset_index(name="total")
+            )
 
-        measurement_name = "revenue"
+            # Calculate the total pallet count for each entity1
+            entity1_totals = (
+                data.groupby(entity1_col)["container_number"]
+                .nunique()
+                .reset_index(name="grand_total")
+            )
 
-    # Merge the total counts back to get percentages
-    entity_preferences = entity_preferences.merge(entity1_totals, on=entity1_col)
-    entity_preferences["percentage"] = (
-        entity_preferences["pallet_count"] / entity_preferences["total_pallets"]
-    ) * 100
-    entity_preferences["percentage_prop"] = entity_preferences["percentage"] / 100
+            measurement_name = "containers"
+        elif value_col == "std_cartons":
+            # Use standard cartons instead of pallet counts
+            entity_preferences = (
+                data.groupby([entity1_col, entity2_col])["std_cartons"]
+                .sum()
+                .reset_index(name="total")  # keep column name for consistency
+            )
 
-    # Step 2: Calculate metrics for each entity1
-    results = []
-    for name, group in entity_preferences.groupby(entity1_col):
-        # Count unique pallets for this entity1
-        total_pallets = group["total_pallets"].iloc[0]
+            # Calculate the total cartons for each entity1
+            entity1_totals = (
+                data.groupby(entity1_col)["std_cartons"]
+                .sum()
+                .reset_index(name="grand_total")  # keep column name for consistency
+            )
 
-        # Calculate raw HHI
-        hhi = sum(group["percentage_prop"] ** 2)
+            measurement_name = "std_cartons"
+        else:  # value_col == "income"
+            # Use revenue instead of pallet counts
+            entity_preferences = (
+                data.groupby([entity1_col, entity2_col])["income"]
+                .sum()
+                .reset_index(name="total")  # keep column name for consistency
+            )
 
-        # Count distinct entity2 values
-        distinct_entity2_count = len(group)
+            # Calculate the total revenue for each entity1
+            entity1_totals = (
+                data.groupby(entity1_col)["income"]
+                .sum()
+                .reset_index(name="grand_total")  # keep column name for consistency
+            )
 
-        # Calculate normalized HHI
-        normalized_hhi = (
-            1.0
-            if distinct_entity2_count == 1
-            else (hhi - 1 / distinct_entity2_count) / (1 - 1 / distinct_entity2_count)
-        )
+            measurement_name = "revenue"
 
-        # Find entity2 with the highest pallet count
-        top_entity2_row = group.loc[group["pallet_count"].idxmax()]
-        top_entity2 = top_entity2_row[entity2_col]
-        top_entity2_pallet_count = top_entity2_row["pallet_count"]
+        print(f"Entity preferences shape: {entity_preferences.shape}")
+        print(f"Entity1 totals shape: {entity1_totals.shape}")
 
-        # Calculate percentage of total pallets for the top entity2
-        top_entity2_percentage = (top_entity2_pallet_count / total_pallets) * 100
+        # Merge the total counts back to get percentages
+        entity_preferences = entity_preferences.merge(entity1_totals, on=entity1_col)
+        entity_preferences["percentage"] = (
+            entity_preferences["total"] / entity_preferences["grand_total"]
+        ) * 100
+        entity_preferences["percentage_prop"] = entity_preferences["percentage"] / 100
 
-        results.append(
-            {
-                entity1_col: name,
-                "unique_pallets": total_pallets,
-                "hhi": round(hhi, 2),
-                "normalized_hhi": round(normalized_hhi, 2),
-                f"distinct_{entity2_col}_count": distinct_entity2_count,
-                f"top_{entity2_col}": top_entity2,
-                f"top_{entity2_col}_percentage": round(top_entity2_percentage, 2),
-                "measurement": measurement_name,
-            }
-        )
+        print(f"Merged entity preferences shape: {entity_preferences.shape}")
 
-    # Convert results to dataframe
-    result_df = pd.DataFrame(results)
+        # Step 2: Calculate metrics for each entity1
+        results = []
+        for name, group in entity_preferences.groupby(entity1_col):
+            # Count unique pallets for this entity1
+            grand_total = group["grand_total"].iloc[0]
 
-    # Sort by pallets in descending order
-    result_df = result_df.sort_values(by="unique_pallets", ascending=False)
+            # Calculate raw HHI
+            hhi = sum(group["percentage_prop"] ** 2)
 
-    return result_df
+            # Count distinct entity2 values
+            distinct_entity2_count = len(group)
+
+            # Calculate normalized HHI
+            normalized_hhi = (
+                1.0
+                if distinct_entity2_count == 1
+                else (hhi - 1 / distinct_entity2_count)
+                / (1 - 1 / distinct_entity2_count)
+            )
+
+            # Find entity2 with the highest pallet count
+            top_entity2_row = group.loc[group["total"].idxmax()]
+            top_entity2 = top_entity2_row[entity2_col]
+            top_entity2_measurement = top_entity2_row["total"]
+
+            # Calculate percentage of total pallets for the top entity2
+            top_entity2_percentage = (top_entity2_measurement / grand_total) * 100
+
+            results.append(
+                {
+                    entity1_col: name,
+                    "grand_total": grand_total,
+                    "normalized_hhi": round(normalized_hhi, 2),
+                    f"distinct_{entity2_col}_count": distinct_entity2_count,
+                    f"top_{entity2_col}": top_entity2,
+                    f"top_{entity2_col}_percentage": round(top_entity2_percentage, 2),
+                    "measurement": measurement_name,
+                }
+            )
+
+        print(f"Number of results: {len(results)}")
+
+        # Convert results to dataframe
+        result_df = pd.DataFrame(results)
+
+        print(f"Result dataframe shape: {result_df.shape}")
+        print(f"Result dataframe columns: {result_df.columns.tolist()}")
+
+        # Sort by pallets in descending order
+        result_df = result_df.sort_values(by="grand_total", ascending=False)
+
+        return result_df
+    except Exception as e:
+        print(f"Error in calculate_concentration_metrics: {str(e)}")
+        print(traceback.format_exc())
+        raise
 
 
-def plot_concentration_bubble(
-    metrics_df, figsize=(12, 8), min_pallets=0, title=None, label_threshold=0.05
-):
+def plot_concentration_bubble(metrics_df):
     """
     Create a simple bubble chart visualization from concentration metrics data.
 
@@ -1310,112 +1076,130 @@ def plot_concentration_bubble(
     -----------
     metrics_df : pandas.DataFrame
         The dataframe output from calculate_concentration_metrics function
-    figsize : tuple
-        Figure size for the plot (width, height)
-    min_pallets : int
-        Minimum number of pallets for inclusion in the chart (0 to include all)
-    title : str, optional
-        Custom title for the plot
-    label_threshold : float
-        Minimum percentage of max pallet count to show labels (0.05 = 5%)
 
     Returns:
     --------
     fig : matplotlib.figure.Figure
         The figure containing the visualization
     """
+    import traceback
 
-    df = metrics_df.copy()
+    try:
+        df = metrics_df.copy()
 
-    # Extract entity column name (first column)
-    entity_col = df.columns[0]
+        # Debug: Check if dataframe is empty
+        if df.empty:
+            raise ValueError("The metrics dataframe is empty")
 
-    # Get top entity column name and percentage column
-    top_entity_col = [
-        col
-        for col in df.columns
-        if col.startswith("top_") and not col.endswith("percentage")
-    ][0]
-    top_pct_col = f"{top_entity_col}_percentage"
+        # Debug: Print column names
+        print(f"Dataframe columns: {df.columns.tolist()}")
 
-    # Extract entity2_col from top_entity_col by removing "top_" prefix
-    entity2_col = top_entity_col.replace("top_", "")
+        # Extract entity column name (first column)
+        if len(df.columns) == 0:
+            raise ValueError("The metrics dataframe has no columns")
 
-    # Get measurement type from the metrics dataframe
-    measurement = (
-        df["measurement"].iloc[0] if "measurement" in df.columns else "pallets"
-    )
+        entity_col = df.columns[0]
+        print(f"Entity column: {entity_col}")
 
-    # Define axis label based on measurement
-    y_axis_label = {
-        "pallets": "Number of Pallets",
-        "cartons": "Number of Standard Cartons",
-        "revenue": "Total Revenue (ZAR)",
-    }.get(measurement, "Value")
+        # Get top entity column name and percentage column
+        top_entity_cols = [
+            col
+            for col in df.columns
+            if col.startswith("top_") and not col.endswith("percentage")
+        ]
+        print(df.columns)
 
-    # Filter data if threshold is provided
-    plot_data = df[df["unique_pallets"] >= min_pallets]
-
-    # Create figure and axes
-    fig, ax = plt.subplots(figsize=figsize)
-
-    # Create color map from blue (low concentration) to red (high concentration)
-    colors = ["#4575b4", "#91bfdb", "#e0f3f8", "#fee090", "#fc8d59", "#d73027"]
-    cmap = LinearSegmentedColormap.from_list("concentration", colors)
-
-    # Create bubble chart
-    scatter = ax.scatter(
-        plot_data["normalized_hhi"],
-        plot_data["unique_pallets"],
-        s=plot_data["unique_pallets"]
-        / plot_data["unique_pallets"].max()
-        * 500,  # Size based on pallets
-        c=plot_data[top_pct_col],  # Color based on percentage of top entity
-        cmap=cmap,
-        alpha=0.7,
-        edgecolors="k",
-    )
-
-    # Add labels to significant points
-    for i, row in plot_data.iterrows():
-        if row["unique_pallets"] > plot_data["unique_pallets"].max() * label_threshold:
-            ax.annotate(
-                row[entity_col],
-                (row["normalized_hhi"], row["unique_pallets"]),
-                xytext=(5, 0),
-                textcoords="offset points",
-                fontsize=9,
-                fontweight="bold",
+        if not top_entity_cols:
+            raise ValueError(
+                f"No top entity columns found. Available columns: {df.columns.tolist()}"
             )
 
-    # Add colorbar
-    cbar = plt.colorbar(scatter, ax=ax)
-    cbar.set_label(f"% of {measurement} to top {entity2_col}")
+        top_entity_col = top_entity_cols[0]
+        top_pct_col = f"{top_entity_col}_percentage"
+        print(f"Top entity column: {top_entity_col}, Percentage column: {top_pct_col}")
 
-    # Set titles and labels
-    if title:
-        ax.set_title(title, fontsize=14)
-    else:
+        # Extract entity2_col from top_entity_col by removing "top_" prefix
+        entity2_col = top_entity_col.replace("top_", "")
+
+        # Get measurement type from the metrics dataframe
+        measurement = (
+            df["measurement"].iloc[0] if "measurement" in df.columns else "pallets"
+        )
+        print(f"Measurement: {measurement}")
+
+        # Define axis label based on measurement
+        y_axis_label = {
+            "pallets": "Number of Pallets",
+            "cartons": "Number of Standard Cartons",
+            "revenue": "Total Revenue (ZAR)",
+        }.get(measurement, "Value")
+
+        # Filter data if threshold is provided
+        plot_data = df[df["grand_total"] >= 50]
+        print(f"Filtered data shape: {plot_data.shape}")
+
+        if plot_data.empty:
+            raise ValueError(
+                "No data points meet the threshold criteria (grand_total >= 50)"
+            )
+
+        # Create figure and axes
+        fig, ax = plt.subplots(figsize=(12, 8))
+
+        # Create color map from blue (low concentration) to red (high concentration)
+        colors = ["#4575b4", "#91bfdb", "#e0f3f8", "#fee090", "#fc8d59", "#d73027"]
+        cmap = LinearSegmentedColormap.from_list("concentration", colors)
+
+        # Create bubble chart
+        scatter = ax.scatter(
+            plot_data["normalized_hhi"],
+            plot_data["grand_total"],
+            s=plot_data["grand_total"]
+            / plot_data["grand_total"].max()
+            * 500,  # Size based on pallets
+            c=plot_data[top_pct_col],  # Color based on percentage of top entity
+            cmap=cmap,
+            alpha=0.7,
+            edgecolors="k",
+        )
+
+        # Add labels to significant points
+        for i, row in plot_data.iterrows():
+            if row["grand_total"] > plot_data["grand_total"].max() * 0.05:
+                ax.annotate(
+                    row[entity_col],
+                    (row["normalized_hhi"], row["grand_total"]),
+                    xytext=(5, 0),
+                    textcoords="offset points",
+                    fontsize=9,
+                    fontweight="bold",
+                )
+
+        # Add colorbar
+        cbar = plt.colorbar(scatter, ax=ax)
+        cbar.set_label(f"% of {measurement} to top {entity2_col}")
+
+        # Set titles and labels
         ax.set_title(
             f"{entity2_col} Concentration Analysis by {entity_col}", fontsize=14
         )
 
-    ax.set_xlabel(
-        "Normalized HHI (0 = Even Distribution, 1 = Complete Concentration)",
-        fontsize=12,
-    )
-    ax.set_ylabel(y_axis_label, fontsize=12)
+        ax.set_xlabel(
+            "Normalized HHI (0 = Even Distribution, 1 = Complete Concentration)",
+            fontsize=12,
+        )
+        ax.set_ylabel(y_axis_label, fontsize=12)
 
-    # Add grid
-    ax.grid(True, linestyle="--", alpha=0.7)
+        # Add grid
+        ax.grid(True, linestyle="--", alpha=0.7)
 
-    plt.tight_layout()
+        plt.tight_layout()
 
-    # Save the figure
-    # filename = f"{entity_col}_by_{entity2_col}_concentration_bubble.png"
-    # plt.savefig(OUTPUT_CG_PATH / filename, dpi=300, bbox_inches="tight")
-
-    return fig
+        return fig
+    except Exception as e:
+        print(f"Error in plot_concentration_bubble: {str(e)}")
+        print(traceback.format_exc())
+        raise
 
 
 def save_figures_to_pdf(figures, output_path, title):
