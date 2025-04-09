@@ -1,11 +1,12 @@
 import streamlit as st
 
 # Import modules
-from data_loader import load_data_from_database, create_aggregated_dataframe
+from data_loader import load_data_from_database, create_viz_df
 from state_manager import (
     initialize_session_state, 
     clear_visualisation_state, 
-    update_data_state
+    update_data_state,
+    update_visualization
 )
 from ui_components import (
     setup_page_config,
@@ -62,8 +63,8 @@ def main():
         clear_visualisation_state()
         with st.spinner("Loading and processing data..."):
             # Load new data - now only returns cg_df
-            cg_df = load_data_from_database(season_year, commodity_group)
-            update_data_state(cg_df)
+            df = load_data_from_database(season_year, commodity_group)
+            update_data_state(df)
     
     # Use the data from session state
     data_loaded = st.session_state.data_loaded
@@ -76,17 +77,21 @@ def main():
         # Create the appropriate aggregated dataframe based on the visualisation type
         with st.spinner("Preparing data for visualisation..."):
             if viz_type in ["Buyer-Seller Relationship", "Individual Company Network", "Network Timelapse"]:
-                agg_df = create_aggregated_dataframe(st.session_state.cg_df, "network")
+                viz_df = create_viz_df(st.session_state.df, "network")
             else:
-                agg_df = create_aggregated_dataframe(st.session_state.cg_df, "heatmap")
+                viz_df = create_viz_df(st.session_state.df, "heatmap")
+                
+            st.session_state.visualization["df"] = viz_df
+
             
             # Always update agg_df in session state to ensure it's refreshed for the current visualization
-            st.session_state.agg_df = agg_df
-            if agg_df is not None:
+            # update_visualization(viz_type, viz_df)
+            if viz_df is not None:
                 # Update company IDs based on the new agg_df
-                buyer_ids = agg_df["buyer_id"].dropna().unique().tolist()
-                seller_ids = agg_df["seller_id"].dropna().unique().tolist()
+                buyer_ids = viz_df["buyer_id"].dropna().unique().tolist()
+                seller_ids = viz_df["seller_id"].dropna().unique().tolist()
                 st.session_state.company_ids = sorted(list(set(buyer_ids + seller_ids)))
+                
         
         # Handle different visualisation types
         if viz_type == "Buyer-Seller Relationship":
@@ -139,58 +144,11 @@ def main():
                     display_visualization_stats(stats)
                 else:
                     st.info("No statistics available for this visualization type.")
-        
-        # Use legacy approach as fallback during transition
-        elif st.session_state.viz_data is not None:
-            # Create an expander for statistics
-            with st.expander("Statistics", expanded=True):
-                viz_data = st.session_state.viz_data
-                viz_type = viz_data.get("type")
-                
-                # Format statistics based on visualization type
-                stats = None
-                if viz_type in ["relationship", "company_network", "network_timelapse"]:
-                    # For network visualizations
-                    G = viz_data.get("graph")
-                    params = viz_data.get("params")
-                    focal_info = viz_data.get("focal_info")
-                    full_graph = viz_data.get("full_graph")
-                    stats = format_network_stats(G, viz_type, params, focal_info, full_graph)
-                elif viz_type in ["heatmap", "packing_week_heatmap"]:
-                    # For heatmap visualizations
-                    data = viz_data.get("data")
-                    params = viz_data.get("params")
-                    stats = format_heatmap_stats(data, viz_type, params)
-                elif viz_type == "concentration_bubble":
-                    # For bubble plot visualizations
-                    data = viz_data.get("data")
-                    params = viz_data.get("params")
-                    stats = format_bubble_stats(data, params)
-                
-                # Display the formatted statistics
-                if stats:
-                    display_visualization_stats(stats)
-                else:
-                    st.info("No statistics available for this visualization type.")
-        
-        # Fall back to the old network_data approach as last resort
-        elif st.session_state.network_data is not None:
-            with st.expander("Network Statistics", expanded=True):
-                G = st.session_state.network_data["graph"]
-                viz_type = st.session_state.network_data["type"]
-                params = st.session_state.network_data["params"]
-                focal_info = st.session_state.network_data.get("focal_info")
-                full_graph = st.session_state.network_data.get("full_graph")
-                
-                # Format and display the network statistics
-                stats = format_network_stats(G, viz_type, params, focal_info, full_graph)
-                display_network_stats(stats)
     
     # Display data preview based on whether visualisation is active
     has_visualization = st.session_state.visualization["type"] is not None
-    legacy_visualization = st.session_state.get("viz_data") is not None or st.session_state.network_data is not None
-    data_preview_expanded = not (has_visualization or legacy_visualization)
-    render_data_preview(st.session_state.cg_df, expanded=data_preview_expanded)
+    data_preview_expanded = not (has_visualization)
+    render_data_preview(st.session_state.df, expanded=data_preview_expanded)
 
 
 if __name__ == "__main__":
