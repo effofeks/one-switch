@@ -1,14 +1,19 @@
-# Network Visualization Tool
+# Data Analysis & visualisation Tool
 
-A lightweight web application for visualizing network graphs using different visualisation methods based on parameter inputs.
+A comprehensive web application for analyzing and visualizing trade data through network graphs and statistical heatmaps.
 
 ## Overview
 
-This application provides a user-friendly interface to generate various network visualisations:
+This application provides a user-friendly interface to generate various data visualisations:
 
-1. **Strong Connections** - Visualize nodes with strong edge connections and their neighbors
-2. **Company Network** - Visualize a network centered around a specific company
-3. **Network Timelapse** - Create an animation showing the network evolution over time
+1. **Network visualisations**
+   - **Buyer-Seller Relationship** - Visualize nodes with strong edge connections and their neighbors
+   - **Individual Company Network** - Visualize a network centered around a specific company
+   - **Network Timelapse** - Create an animation showing the network evolution over time
+
+2. **Statistical Heatmaps**
+   - **Standard Heatmap** - Visualize relationships between two categorical variables with statistical significance testing
+   - **Packing Week Heatmap** - Time-ordered heatmap showing trends across packing weeks
 
 ## Installation
 
@@ -23,18 +28,19 @@ pip install -r requirements.txt
    * Create a `.env` file in the root directory with your database credentials
    * Use the following format:
    ```
-   DBT_DEV_HOST=your_host
-   DBT_DEV_USER=your_username
-   DBT_DEV_PASSWORD=your_password
+   DB_USERNAME = 'warehouse'
+   DB_PASSWORD = 'warehouse'
+   DB_HOST = 'localhost'
+   DB_PORT = '5432'
+   DB_NAME = 'warehouse'
    ```
-   * Alternatively, edit the DB_URL in cg_analysis.py directly
 
 ## Running the Application
 
 To start the application, run:
 
 ```
-streamlit run network_viz_app.py
+streamlit run data_explorer_app.py
 ```
 
 This will start a local web server and open the application in your default web browser.
@@ -42,7 +48,8 @@ This will start a local web server and open the application in your default web 
 ## Features
 
 - Interactive parameter selection through sliders and dropdowns
-- Three different network visualisation types
+- Multiple visualisation types for different analytical needs
+- Statistical significance testing in heatmaps with p-value tables
 - Dynamic graph generation based on parameter values
 - Animated network visualisation (timelapse)
 - Data source selection (sample data or database connection)
@@ -51,45 +58,29 @@ This will start a local web server and open the application in your default web 
 
 ## Usage
 
-### Using Sample Data
-1. Select "Sample Data" as the data source
-2. Select the type of visualisation from the sidebar
-3. Adjust the parameters for the selected visualisation
-4. Click the "Generate" button to create the visualisation
+### Data Loading and Filtering
+1. Select your data source
+2. Apply filters as needed
+3. Click "Load Data" to prepare the dataset for visualisation
 
-### Using Database Connection
-1. Select "Database Connection" as the data source
-2. Choose the season year and commodity group from the dropdown menus
-3. Click "Load Data" to fetch the filtered data from the database
-4. Select the visualisation type and adjust parameters
-5. Click the "Generate" button to create the visualisation
+### Creating visualisations
+1. Select the visualisation type from the sidebar
+2. Configure the parameters specific to that visualisation
+3. Click "Generate" to create the visualisation
+4. View statistics and insights in the expandable "Statistics" section
+
+### Heatmap Statistical Analysis
+The heatmap visualisations include:
+- Statistical significance testing with configurable parameters
+- Correction for multiple testing using Benjamini-Hochberg FDR method
+- Adjustable significance level and minimum effect size
+- Complete p-value table with formatted values and counts
 
 ## Data Processing
 
-When using the database connection, the application:
-1. Loads data from three main SQL queries:
-   - Carton groupings data (main trade transactions)
-   - Pallet timeline data (for standardized carton measurements)
-   - Finance data (for revenue and expense information)
-2. Applies filters for season year and commodity group
-3. Processes and merges the data to create a comprehensive dataset for visualisation
-4. Calculates derived metrics like revenue in a standardized currency
-
-## Future Work
-
-- Add more visualisation types and parameters
-- Add export options for generated visualisations
-- Implement caching for improved performance with large datasets
-- Add user authentication for secure database access
-- Add more filtering options (by region, date range, etc.)
-- Support for custom SQL queries
-
-## Dependencies
-
-- Streamlit
-- NetworkX
-- Matplotlib
-- Pandas
-- NumPy
-- SQLAlchemy
-- python-dotenv 
+The application processes data through:
+1. Loading from selected data sources
+2. Filtering based on user-selected criteria
+3. Applying statistical methods for significance testing
+4. Calculating weighted averages and normalized proportions for heatmaps
+5. Generating network metrics for graph-based visualisations
