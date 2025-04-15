@@ -128,25 +128,25 @@ def load_data_from_database(season, commodity_group):
 @st.cache_data(show_spinner=False)
 def create_viz_df(df, viz_type="network"):
     """
-    Create an aggregated dataframe based on the visualization type.
+    Create an aggregated dataframe based on the visualisation type.
 
     Parameters:
     -----------
     df : pandas.DataFrame
         The carton groupings dataframe
     viz_type : str
-        The visualization type to determine how to aggregate the data
+        The visualisation type to determine how to aggregate the data
 
     Returns:
     --------
     pandas.DataFrame
-        The aggregated dataframe suitable for the specified visualization
+        The aggregated dataframe suitable for the specified visualisation
     """
     if df is None:
         return None
 
     if viz_type == "network":
-        # Network visualization aggregation
+        # Network visualisation aggregation
         viz_df = (
             df.groupby(["seller_id", "buyer_id", "packing_week", "container_number"])
             .agg(
@@ -195,7 +195,7 @@ def create_viz_df(df, viz_type="network"):
 
     else:
         st.warning(
-            f"Visualization type '{viz_type}' not recognized. Using default heatmap visualization."
+            f"Visualization type '{viz_type}' not recognized. Using default heatmap visualisation."
         )
         return create_viz_df(df, "heatmap")
 

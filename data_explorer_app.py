@@ -1,4 +1,7 @@
+import numpy as np
 import streamlit as st
+import io
+import pandas as pd
 
 # Import modules
 from data_loader import load_data_from_database, create_viz_df
@@ -6,7 +9,7 @@ from state_manager import (
     initialize_session_state, 
     clear_visualisation_state, 
     update_data_state,
-    update_visualization
+    update_visualisation_state
 )
 from ui_components import (
     setup_page_config,
@@ -19,7 +22,6 @@ from ui_components import (
     render_network_timelapse_params,
     render_heatmap_params,
     render_packing_week_heatmap_params,
-    render_concentration_bubble_params,
     render_current_visualisation,
     render_data_preview
 )
@@ -29,14 +31,12 @@ from viz_handlers import (
     handle_network_timelapse_viz,
     handle_heatmap_viz,
     handle_packing_week_heatmap_viz,
-    handle_concentration_bubble_viz
 )
 from viz_utils import (
     format_network_stats,
     display_network_stats,
     format_heatmap_stats,
-    format_bubble_stats,
-    display_visualization_stats,
+    display_visualisation_stats,
     format_stats
 )
 
@@ -81,11 +81,11 @@ def main():
             else:
                 viz_df = create_viz_df(st.session_state.df, "heatmap")
                 
-            st.session_state.visualization["df"] = viz_df
+            st.session_state.visualisation["data"] = viz_df
 
             
-            # Always update agg_df in session state to ensure it's refreshed for the current visualization
-            # update_visualization(viz_type, viz_df)
+            # Always update agg_df in session state to ensure it's refreshed for the current visualisation
+            # update_visualisation(viz_type, viz_df)
             if viz_df is not None:
                 # Update company IDs based on the new agg_df
                 buyer_ids = viz_df["buyer_id"].dropna().unique().tolist()
@@ -115,39 +115,33 @@ def main():
         elif viz_type == "Heatmap":
             # Render parameters UI and get values
             params, generate_viz = render_heatmap_params()
-            # Handle visualisation generation
-            handle_heatmap_viz(params, generate_viz)
             
-        elif viz_type == "Packing Week Heatmap":
-            # Render parameters UI and get values
-            params, generate_viz = render_packing_week_heatmap_params()
-            # Handle visualisation generation
-            handle_packing_week_heatmap_viz(params, generate_viz)
-            
-        elif viz_type == "Concentration Bubble Plot":
-            # Render parameters UI and get values
-            params, generate_viz = render_concentration_bubble_params()
-            # Handle visualisation generation
-            handle_concentration_bubble_viz(params, generate_viz)
-        
+            # Check if this is a packing week heatmap based on the params
+            if params.get("is_packing_week_heatmap", False):
+                # Use packing week heatmap handler
+                handle_packing_week_heatmap_viz(params, generate_viz)
+            else:
+                # Use regular heatmap handler
+                handle_heatmap_viz(params, generate_viz)
+                
         # Display the current visualisation
-        visualization = st.session_state.visualization
-        render_current_visualisation(visualization["html"], visualization["plot"])
+        visualisation = st.session_state.visualisation
+        render_current_visualisation(visualisation["html"], visualisation["plot"])
         
-        # Display visualization statistics if available
-        if visualization["type"] is not None:
+        # Display visualisation statistics if available
+        if visualisation["type"] is not None:
             # Create an expander for statistics
             with st.expander("Statistics", expanded=True):
                 # Get and display statistics using the unified format_stats function
-                stats = format_stats(visualization)
+                stats = format_stats(visualisation)
                 if stats:
-                    display_visualization_stats(stats)
+                    display_visualisation_stats(stats)
                 else:
-                    st.info("No statistics available for this visualization type.")
+                    st.info("No statistics available for this visualisation type.")
     
     # Display data preview based on whether visualisation is active
-    has_visualization = st.session_state.visualization["type"] is not None
-    data_preview_expanded = not (has_visualization)
+    has_visualisation = st.session_state.visualisation["type"] is not None
+    data_preview_expanded = not (has_visualisation)
     render_data_preview(st.session_state.df, expanded=data_preview_expanded)
 
 

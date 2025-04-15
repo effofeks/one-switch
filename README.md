@@ -1,10 +1,10 @@
 # Network Visualization Tool
 
-A lightweight web application for visualizing network graphs using different visualization methods based on parameter inputs.
+A lightweight web application for visualizing network graphs using different visualisation methods based on parameter inputs.
 
 ## Overview
 
-This application provides a user-friendly interface to generate various network visualizations:
+This application provides a user-friendly interface to generate various network visualisations:
 
 1. **Strong Connections** - Visualize nodes with strong edge connections and their neighbors
 2. **Company Network** - Visualize a network centered around a specific company
@@ -42,27 +42,27 @@ This will start a local web server and open the application in your default web 
 ## Features
 
 - Interactive parameter selection through sliders and dropdowns
-- Three different network visualization types
+- Three different network visualisation types
 - Dynamic graph generation based on parameter values
-- Animated network visualization (timelapse)
+- Animated network visualisation (timelapse)
 - Data source selection (sample data or database connection)
 - Data filtering options for season year and commodity group
-- Detailed visualization of trade networks between buyers and sellers
+- Detailed visualisation of trade networks between buyers and sellers
 
 ## Usage
 
 ### Using Sample Data
 1. Select "Sample Data" as the data source
-2. Select the type of visualization from the sidebar
-3. Adjust the parameters for the selected visualization
-4. Click the "Generate" button to create the visualization
+2. Select the type of visualisation from the sidebar
+3. Adjust the parameters for the selected visualisation
+4. Click the "Generate" button to create the visualisation
 
 ### Using Database Connection
 1. Select "Database Connection" as the data source
 2. Choose the season year and commodity group from the dropdown menus
 3. Click "Load Data" to fetch the filtered data from the database
-4. Select the visualization type and adjust parameters
-5. Click the "Generate" button to create the visualization
+4. Select the visualisation type and adjust parameters
+5. Click the "Generate" button to create the visualisation
 
 ## Data Processing
 
@@ -72,13 +72,13 @@ When using the database connection, the application:
    - Pallet timeline data (for standardized carton measurements)
    - Finance data (for revenue and expense information)
 2. Applies filters for season year and commodity group
-3. Processes and merges the data to create a comprehensive dataset for visualization
+3. Processes and merges the data to create a comprehensive dataset for visualisation
 4. Calculates derived metrics like revenue in a standardized currency
 
 ## Future Work
 
-- Add more visualization types and parameters
-- Add export options for generated visualizations
+- Add more visualisation types and parameters
+- Add export options for generated visualisations
 - Implement caching for improved performance with large datasets
 - Add user authentication for secure database access
 - Add more filtering options (by region, date range, etc.)

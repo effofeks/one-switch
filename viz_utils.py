@@ -4,6 +4,7 @@ import io
 import base64
 import pandas as pd
 import streamlit as st
+import numpy as np
 
 
 def fig_to_image(fig):
@@ -142,7 +143,7 @@ def format_network_stats(G, viz_type, params=None, focal_info=None, full_graph=N
 
     stats = {}
 
-    # Map new visualization types to old ones for backward compatibility
+    # Map new visualisation types to old ones for backward compatibility
     viz_type_map = {
         "relationship": "Strong Connections",
         "company_network": "Company Network",
@@ -152,7 +153,7 @@ def format_network_stats(G, viz_type, params=None, focal_info=None, full_graph=N
     # Convert new viz_type to old format if needed
     display_viz_type = viz_type_map.get(viz_type, viz_type)
 
-    # Additional stats depending on visualization type
+    # Additional stats depending on visualisation type
     if display_viz_type == "Strong Connections":
         # Get parameters
         rank = params.get("rank", 1)
@@ -165,7 +166,7 @@ def format_network_stats(G, viz_type, params=None, focal_info=None, full_graph=N
             "revenue": "revenue",
         }.get(measure, measure)
 
-        # Use focal info that was stored when creating the visualization
+        # Use focal info that was stored when creating the visualisation
         if focal_info:
             node1 = focal_info.get("node1")
             node2 = focal_info.get("node2")
@@ -270,7 +271,7 @@ Company `{formatted_node2}`:
                     # If conversion fails, use the original value
                     formatted_focal_company = str(focal_company)
 
-                # USE THE FULL GRAPH for getting all connections, not just the visualization subgraph
+                # USE THE FULL GRAPH for getting all connections, not just the visualisation subgraph
                 active_graph = (
                     full_graph if full_graph and focal_company in full_graph else G
                 )
@@ -381,255 +382,232 @@ Top 5 strongest connections ({weight_label}):
                     "Layout": str(params.get("layout")),
                 }
 
-    elif display_viz_type in ["Heatmap", "heatmap"]:
-        # Include parameters used
-        if params:
-            stats["Parameters"] = {
-                "Row Variable": params.get("row_col", params.get("y_axis", "")).replace("_", " ").title(),
-                "Column Variable": params.get("col_col", params.get("x_axis", "")).replace("_", " ").title(),
-                "Measure": params.get("measure", params.get("color_by", "containers")).title(),
-                "Normalize Rows": "Yes" if params.get("normalize_rows") else "No",
-                "Color Map": params.get("cmap", "YlGnBu"),
-                "Significance Level": str(params.get("significance_level", 0.05)),
-            }
-            
-    elif display_viz_type in ["Packing Week Heatmap", "packing_week_heatmap"]:
-        # Include parameters used
-        if params:
-            stats["Parameters"] = {
-                "Column Variable": params.get("col_col", params.get("y_axis", "")).replace("_", " ").title(),
-                "Measure": params.get("measure", params.get("color_by", "containers")).title(),
-                "Normalize Rows": "Yes" if params.get("normalize_rows") else "No",
-                "Significance Level": str(params.get("significance_level", 0.05)),
-            }
-            
-    elif display_viz_type in ["Concentration Bubble Plot", "concentration_bubble"]:
-        # Include parameters used
-        if params:
-            stats["Parameters"] = {
-                "Primary Variable": params.get("entity1_col", "").replace("_", " ").title(),
-                "Secondary Variable": params.get("entity2_col", "").replace("_", " ").title(),
-                "Measure": params.get("measure", params.get("color_by", "containers")).title(),
-            }
-            
-            # Add an explanation of HHI
-            stats["What is HHI?"] = """
-The **Herfindahl-Hirschman Index (HHI)** is a measure of market concentration.
-
-- **Raw HHI** is the sum of squared market shares (0 to 1)
-- **Normalized HHI** adjusts for the number of market participants (0 to 1)
-  - 0 = Perfect competition (equal distribution)
-  - 1 = Complete concentration (monopoly)
-            
-The bubble size represents the number of containers, and the color represents 
-the percentage of containers going to the top participant.
-            """
-
     return stats
 
 
 def display_network_stats(stats):
     """Display the formatted network statistics in Streamlit.
-    This function works the same as display_visualization_stats for backward compatibility.
+    This function works the same as display_visualisation_stats for backward compatibility.
     """
     # Simply call the generalized function
-    display_visualization_stats(stats)
+    display_visualisation_stats(stats)
 
 
-def format_heatmap_stats(data, viz_type, params=None):
+def format_heatmap_stats(data, params=None, metadata=None):
     """Format heatmap statistics into a structured display for Streamlit"""
-    if data is None:
+    if data is None or not params:
         return None
     
-    stats = {}
-    
-    # Common heatmap statistics
-    x_axis = params.get("x_axis", "")
-    y_axis = params.get("y_axis", "")
-    color_by = params.get("color_by", "")
-    
-    # Basic data overview
-    stats["Data Overview"] = {
-        "Data Points": str(len(data)),
-        "X-axis": x_axis,
-        "Y-axis": y_axis,
-        "Color by": color_by,
-    }
-    
-    # Additional stats depending on heatmap type
-    if viz_type == "heatmap":
-        # Extract specific heatmap statistics like min/max values
-        if "value" in data.columns:
-            min_value = data["value"].min()
-            max_value = data["value"].max()
-            avg_value = data["value"].mean()
+    try:
+        stats = {}
+        
+        # Get parameters safely, ensuring defaults if values are missing
+        row_col = params.get("row_col", "")
+        col_col = params.get("col_col", "") 
+        value_col = params.get("value_col", "")
+        
+        # Include parameters used as a dictionary
+        param_dict = {}
+        if row_col:
+            param_dict["Row Variable"] = str(row_col)
+        if col_col:
+            param_dict["Column Variable"] = str(col_col)
+        if value_col:
+            param_dict["Measure"] = str(value_col)
             
-            # Format values for display
-            if color_by == "revenue":
-                formatted_min = f"ZAR {int(min_value):,}"
-                formatted_max = f"ZAR {int(max_value):,}"
-                formatted_avg = f"ZAR {int(avg_value):,}"
-            else:
-                formatted_min = f"{min_value:,.2f}"
-                formatted_max = f"{max_value:,.2f}"
-                formatted_avg = f"{avg_value:,.2f}"
+        param_dict["Significance Level"] = str(params.get("significance_level", 0.05))
+        param_dict["Correct Multiple Tests"] = str(params.get("correct_multiple_tests", True))
+        param_dict["Minimum Effect Size"] = str(params.get("min_effect_size", 2.5))
             
-            stats["Value Range"] = {
-                "Minimum": formatted_min,
-                "Maximum": formatted_max,
-                "Average": formatted_avg,
-            }
-    
-    elif viz_type == "packing_week_heatmap":
-        # Extract specific statistics for packing week heatmaps
-        stats["Time Range"] = {
-            "Start Week": str(data[x_axis].min()) if x_axis in data.columns else "N/A",
-            "End Week": str(data[x_axis].max()) if x_axis in data.columns else "N/A",
-            "Total Weeks": str(data[x_axis].nunique()) if x_axis in data.columns else "N/A",
+        stats["Parameters"] = param_dict
+        
+        # Add p-value table if available in metadata
+        if metadata and "pvalue_table" in metadata:
+            pvalue_df = metadata["pvalue_table"]
+            
+            # Format the p-value table
+            # The pvalue_df contains strings in format "0.xxxx (n)" 
+            # We need to extract the p-value and count, reformat them, and recombine
+            formatted_df = pvalue_df.copy()
+            
+            # Process each cell to reformat
+            for i in range(len(formatted_df.index)):
+                for j in range(len(formatted_df.columns)):
+                    cell_value = formatted_df.iloc[i, j]
+                    
+                    if cell_value and isinstance(cell_value, str):
+                        # Extract p-value and count using regex
+                        import re
+                        match = re.match(r"([\d\.]+) \((\d+)\)", cell_value)
+                        if match:
+                            p_value = float(match.group(1))
+                            count = int(match.group(2))
+                            
+                            # Format p-value as percentage with 1 decimal place
+                            p_value_fmt = f"{p_value * 100:.1f}%"
+                            
+                            # Format count with thousand separators (space)
+                            count_fmt = f"{count:,}".replace(",", " ")
+                            
+                            # Combine into new format
+                            formatted_df.iloc[i, j] = f"{p_value_fmt} ({count_fmt})"
+            
+            # Add the formatted table to stats
+            stats["P-Value Table"] = formatted_df
+            
+        # Add data information analysis - ensure all fields exist
+        if not isinstance(data, pd.DataFrame):
+            stats["Data Error"] = "Invalid data format"
+            return stats
+            
+        df = data
+        df_copy = df.copy()
+        
+        # Data overview (dictionary format)
+        stats["Data Overview"] = {
+            "Total Rows": str(len(df))
         }
         
-        # Count unique categories on y-axis
-        if y_axis in data.columns:
-            stats["Categories"] = {
-                "Unique Items": str(data[y_axis].nunique()),
-                "Top Items": ", ".join(data[y_axis].value_counts().nlargest(5).index.tolist()),
-            }
-    
-    # Include parameters used
-    if params:
-        filtered_params = {k: v for k, v in params.items() if v is not None and k not in ["x_axis", "y_axis", "color_by"]}
-        if filtered_params:
-            stats["Additional Parameters"] = filtered_params
-    
-    return stats
-
-
-def format_bubble_stats(data, params=None):
-    """Format bubble plot statistics into a structured display for Streamlit"""
-    if data is None:
-        return None
-    
-    stats = {}
-    
-    # Extract parameters
-    x_axis = params.get("x_axis", "")
-    y_axis = params.get("y_axis", "")
-    size_by = params.get("size_by", "")
-    color_by = params.get("color_by", "")
-    
-    # Basic data overview
-    stats["Data Overview"] = {
-        "Data Points": str(len(data)),
-        "X-axis": x_axis,
-        "Y-axis": y_axis,
-        "Size by": size_by,
-        "Color by": color_by,
-    }
-    
-    # Generate statistics for the axes
-    for axis_name, axis_col in [("X-axis", x_axis), ("Y-axis", y_axis)]:
-        if axis_col in data.columns and data[axis_col].dtype.kind in 'ifc':  # if numeric
-            min_val = data[axis_col].min()
-            max_val = data[axis_col].max()
-            mean_val = data[axis_col].mean()
-            
-            stats[f"{axis_name} Statistics"] = {
-                "Minimum": f"{min_val:,.2f}",
-                "Maximum": f"{max_val:,.2f}",
-                "Average": f"{mean_val:,.2f}",
-            }
-    
-    # Statistics for the size dimension
-    if size_by in data.columns and data[size_by].dtype.kind in 'ifc':
-        min_size = data[size_by].min()
-        max_size = data[size_by].max()
-        mean_size = data[size_by].mean()
+        # Check each column for existence before using it
+        columns_exist = True
+        for col in [col for col in [row_col, col_col, value_col] if col]:
+            if col not in df_copy.columns:
+                columns_exist = False
+                stats["Data Error"] = f"Column '{col}' not found in data"
         
-        stats["Size Dimension"] = {
-            "Minimum": f"{min_size:,.2f}",
-            "Maximum": f"{max_size:,.2f}",
-            "Average": f"{mean_size:,.2f}",
-        }
-    
-    # Statistics for color categories if categorical
-    if color_by in data.columns and data[color_by].dtype.kind not in 'ifc':
-        unique_colors = data[color_by].nunique()
-        top_categories = data[color_by].value_counts().nlargest(5)
+        if not columns_exist:
+            return stats
         
-        stats["Color Categories"] = {
-            "Unique Categories": str(unique_colors),
-            "Top Categories": ", ".join(top_categories.index.tolist()),
+        # Replace 'None' string values with NaN if columns exist
+        columns_to_check = [col for col in [row_col, col_col, value_col] if col and col in df_copy.columns]
+        for col in columns_to_check:
+            df_copy.loc[df_copy[col] == 'None', col] = np.nan
+        
+        # Get columns that actually exist in the dataframe for filtering
+        filter_cols = [col for col in [row_col, col_col] if col and col in df_copy.columns]
+        if len(filter_cols) >= 1:
+            filtered_df = df_copy.dropna(subset=filter_cols)
+            stats["Data Overview"]["Rows Used in Heatmap"] = str(len(filtered_df))
+        else:
+            filtered_df = df_copy
+            stats["Data Overview"]["Rows Used in Heatmap"] = "N/A (no filter columns)"
+        
+        # Critical fields information (as a dataframe)
+        columns_to_analyze = [col for col in [row_col, col_col] if col and col in filtered_df.columns]
+        
+        if columns_to_analyze:
+            try:
+                # Create a proper dataframe for Critical Fields
+                col_data = {
+                    'Column': columns_to_analyze,
+                    'Non-null Values': [filtered_df[col].count() for col in columns_to_analyze],
+                    'Non-Null Unique Values': [filtered_df[col].nunique() for col in columns_to_analyze],
+                    'Dtype': [filtered_df[col].dtype for col in columns_to_analyze],
+                }
+                
+                # Only add sample values if there are values to sample
+                sample_values = []
+                for col in columns_to_analyze:
+                    values = filtered_df[col].head(3).tolist() if not filtered_df[col].empty else []
+                    sample_values.append(str(values))
+                
+                col_data['Sample Values'] = sample_values
+                
+                col_stats = pd.DataFrame(col_data)
+                col_stats = col_stats.astype(str)
+                stats["Critical Fields"] = col_stats
+                
+                # Create a proper dataframe for Missing Values Analysis
+                missing_columns = [col for col in [row_col, col_col, value_col] if col and col in df_copy.columns]
+                if missing_columns:
+                    na_data = {
+                        'Column': missing_columns,
+                        'Missing Values': [df_copy[col].isna().sum() for col in missing_columns],
+                        'Missing Percent': [df_copy[col].isna().mean() * 100 for col in missing_columns]
+                    }
+                    
+                    na_counts = pd.DataFrame(na_data)
+                    na_counts['Missing Percent'] = na_counts['Missing Percent'].round(2)
+                    na_counts = na_counts.astype(str)
+                    stats["Missing Values Analysis"] = na_counts
+            except Exception as e:
+                stats["Data Analysis Error"] = str(e)
+        
+        return stats
+    except Exception as e:
+        import traceback
+        return {
+            "Error": str(e),
+            "Traceback": traceback.format_exc()
         }
-    
-    # Include parameters used
-    if params:
-        filtered_params = {k: v for k, v in params.items() 
-                          if v is not None and k not in ["x_axis", "y_axis", "size_by", "color_by"]}
-        if filtered_params:
-            stats["Additional Parameters"] = filtered_params
-    
-    return stats
 
 
-def display_visualization_stats(stats):
-    """Display the formatted visualization statistics in Streamlit.
-    This is a generic version of display_network_stats that can handle any visualization type.
+def display_visualisation_stats(stats):
+    """Display the formatted visualisation statistics in Streamlit.
+    This is a generic version of display_network_stats that can handle any visualisation type.
     """
     if not stats:
-        st.info("No statistics available for this visualization.")
+        st.info("No statistics available for this visualisation.")
         return
 
     # Display top-level items
     for section, content in stats.items():
-        if isinstance(content, dict):
-            # If the content is a dictionary, display as a table
-            st.subheader(section)
-            for key, value in content.items():
-                st.text(f"{key}: {value}")
+        st.subheader(section)
+        
+        if isinstance(content, pd.DataFrame):
+            # For P-Value Table, show the index (row names)
+            if section == "P-Value Table":
+                st.dataframe(content)
+            else:
+                # For other DataFrames, hide the index
+                st.dataframe(content, hide_index=True)
+        elif isinstance(content, dict):
+            # If the content is a dictionary, convert to DataFrame and display
+            df = pd.DataFrame(list(content.items()), columns=["Metric", "Value"])
+            st.dataframe(df, hide_index=True)
         elif isinstance(content, list):
             # If the content is a list, display as bullet points
-            st.subheader(section)
             for item in content:
                 st.markdown(f"- {item}")
         else:
             # If the content is a string, display as markdown
-            st.subheader(section)
             st.markdown(content)
 
 
-def format_stats(visualization):
+def format_stats(visualisation):
     """
-    Format statistics for any visualization type using the unified visualization structure.
+    Format statistics for any visualisation type using the unified visualisation structure.
     
     Parameters:
     -----------
-    visualization : dict
-        The unified visualization structure from st.session_state.visualization
+    visualisation : dict
+        The unified visualisation structure from st.session_state.visualisation
         
     Returns:
     --------
     dict or None
         Formatted statistics or None if not available
     """
-    if not visualization or not visualization["type"]:
+    if not visualisation or not visualisation["type"]:
         return None
         
-    viz_type = visualization["type"]
-    params = visualization["params"]
-    # result_df = visualization["result_df"]
-    graph = visualization["graph"]
-    metadata = visualization["metadata"]
+    viz_type = visualisation["type"]
+    params = visualisation["params"]
+    # result_df = visualisation["result_df"]
+    graph = visualisation["graph"]
+    metadata = visualisation["metadata"]
     
-    # Route to the appropriate formatter based on visualization type
-    if viz_type in ["relationship", "company_network", "network_timelapse"]:
+    # Route to the appropriate formatter based on visualisation type
+    if viz_type in ["relationship", "strong_connections", "company_network", "network_timelapse"]:
         focal_info = metadata.get("focal_info")
         full_graph = metadata.get("full_graph")
         return format_network_stats(graph, viz_type, params, focal_info, full_graph)
     
-    # elif viz_type in ["heatmap", "packing_week_heatmap"]:
-    #     return format_heatmap_stats(result_df, viz_type, params)
-    
-    # elif viz_type == "concentration_bubble":
-    #     return format_bubble_stats(result_df, params)
+    elif viz_type in ["heatmap", "packing_week_heatmap", "standard_heatmap"]:
+        # Ensure we have value_col in params for heatmap data analysis
+        value_col = params.get("value_col", params.get("measure", "containers"))
+        if "value_col" not in params and value_col:
+            params["value_col"] = value_col
+        return format_heatmap_stats(visualisation["data"], params, metadata)
     
     return None 

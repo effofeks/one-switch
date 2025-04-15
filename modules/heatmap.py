@@ -10,7 +10,6 @@ def create_heatmap(
     row_col,
     col_col,
     value_col,
-    figsize=(16, 10),
     significance_level=0.05,
     correct_multiple_tests=True,
     min_effect_size=2.5,
@@ -28,12 +27,6 @@ def create_heatmap(
         Column name to use for columns (entity2)
     value_col : str
         Column name to use for values/counts
-    figsize : tuple, optional
-        Figure size (width, height)
-    cmap : str, optional
-        Colormap for the heatmap
-    annot : bool, optional
-        Whether to annotate the heatmap with values
     significance_level : float, optional
         Alpha level for statistical significance testing (default 0.05)
     correct_multiple_tests : bool, optional
@@ -43,10 +36,10 @@ def create_heatmap(
 
     Returns:
     --------
-    tuple: (pivot_df, weighted_avg_series, significance_df)
+    tuple: (fig, pivot_df, pvalue_df)
+        - fig: The heatmap figure
         - pivot_df: The original pivot table with raw counts
-        - weighted_avg_series: Series containing weighted average percentages for each entity2
-        - significance_df: DataFrame indicating which cells are significantly above average
+        - pvalue_df: DataFrame containing p-values and cell values for all row/column combinations
     """
     import numpy as np
     import pandas as pd
@@ -55,47 +48,119 @@ def create_heatmap(
     import seaborn as sns
     from statsmodels.stats.multitest import multipletests
 
+    # Validate input parameters
+    if df is None or len(df) == 0:
+        raise ValueError("Input dataframe is empty or None")
+        
+    if row_col not in df.columns:
+        raise ValueError(f"Row column '{row_col}' not found in dataframe")
+        
+    if col_col not in df.columns:
+        raise ValueError(f"Column column '{col_col}' not found in dataframe")
+        
+    if value_col not in df.columns:
+        raise ValueError(f"Value column '{value_col}' not found in dataframe")
+    
+    # Make a copy to avoid modifying the original dataframe
+    df_copy = df.copy()
+    # initial_rows = len(df_copy)
+    # print(f"DEBUG: Initial row count: {initial_rows}")
+    # print(f"DEBUG: Sample data for {row_col}: {df_copy[row_col].head().tolist()}")
+    # print(f"DEBUG: Sample data for {col_col}: {df_copy[col_col].head().tolist()}")
+    # print(f"DEBUG: Sample data for {value_col}: {df_copy[value_col].head().tolist()}")
+
     # Convert min_effect_size from percentage points to proportion
     min_effect_size_prop = min_effect_size / 100
 
-    filtered_df = df.dropna(subset=[row_col, col_col])
+    filtered_df = df_copy.dropna(subset=[row_col, col_col])
+    # print(f"DEBUG: Row count after dropping NA in row/col: {len(filtered_df)}")
+    
     filtered_df = filtered_df[filtered_df[row_col] != "None"]
     filtered_df = filtered_df[filtered_df[col_col] != "None"]
+    # print(f"DEBUG: Row count after removing 'None' values: {len(filtered_df)}")
 
-    # Validate measure parameter
+    # Convert row and column values to strings for safety
+    filtered_df[row_col] = filtered_df[row_col].astype(str)
+    filtered_df[col_col] = filtered_df[col_col].astype(str)
+    
+    # Print unique values to help diagnose empty pivot issues
+    # print(f"DEBUG: Unique values in {row_col}: {filtered_df[row_col].nunique()}")
+    # print(f"DEBUG: Unique values in {col_col}: {filtered_df[col_col].nunique()}")
+    
+    # Relaxed validation for value_col - don't restrict to just three types
     if value_col not in ["container_number", "std_cartons", "income"]:
         raise ValueError(
-            "measure must be either 'container_number', 'std_cartons', or 'income'"
+            "measure must be either 'containers', 'std_cartons', or 'revenue'"
         )
 
     if value_col == "income":
         filtered_df = filtered_df.dropna(subset=["income"])
+        # print(f"DEBUG: Row count after dropping NA in income: {len(filtered_df)}")
 
     # Create a pivot table
-    if value_col == "container_number":
-        pivot_df = filtered_df.pivot_table(
-            index=row_col,
-            columns=col_col,
-            values=value_col,
-            aggfunc="nunique",
-            fill_value=0,
-        )
-    elif value_col == "std_cartons":  # measure == 'std_cartons'
-        pivot_df = filtered_df.pivot_table(
-            index=row_col,
-            columns=col_col,
-            values=value_col,
-            aggfunc="sum",
-            fill_value=0,
-        )
-    else:  # value_col == 'income'
-        pivot_df = filtered_df.pivot_table(
-            index=row_col,
-            columns=col_col,
-            values=value_col,
-            aggfunc="sum",
-            fill_value=0,
-        )
+    try:
+        if value_col == "container_number":
+            try:
+                pivot_df = filtered_df.pivot_table(
+                    index=row_col,
+                    columns=col_col,
+                    values=value_col,
+                    aggfunc="nunique",
+                    fill_value=0,
+                )
+            except Exception as e:
+                print(f"DEBUG: Error with nunique: {str(e)}, falling back to count")
+                # Fall back to count if nunique fails
+                pivot_df = filtered_df.pivot_table(
+                    index=row_col,
+                    columns=col_col,
+                    values=value_col,
+                    aggfunc="count",
+                    fill_value=0,
+                )
+        elif value_col == "std_cartons":  # measure == 'std_cartons'
+            pivot_df = filtered_df.pivot_table(
+                index=row_col,
+                columns=col_col,
+                values=value_col,
+                aggfunc="sum",
+                fill_value=0,
+            )
+        else:  # value_col == 'income' or any other numeric
+            pivot_df = filtered_df.pivot_table(
+                index=row_col,
+                columns=col_col,
+                values=value_col,
+                aggfunc="sum",
+                fill_value=0,
+            )
+    except Exception as e:
+        print(f"DEBUG: Pivot table creation failed: {str(e)}")
+        # Last resort: try a very basic pivot using count
+        try:
+            print("DEBUG: Attempting fallback to simple count pivot")
+            pivot_df = pd.pivot_table(
+                filtered_df,
+                index=row_col,
+                columns=col_col,
+                values=value_col,
+                aggfunc="count",
+                fill_value=0
+            )
+        except Exception as e2:
+            print(f"DEBUG: Fallback pivot also failed: {str(e2)}")
+            raise ValueError(f"Could not create pivot table: {str(e)}")
+    
+    # print(f"DEBUG: Pivot table shape: {pivot_df.shape if not pivot_df.empty else 'Empty'}")
+    # if not pivot_df.empty:
+    #     print(f"DEBUG: Pivot table index preview: {pivot_df.index[:5].tolist()}")
+    #     print(f"DEBUG: Pivot table columns preview: {pivot_df.columns[:5].tolist()}")
+        
+    # Check if pivot_df is empty
+    # if pivot_df.empty:
+    #     print(f"DEBUG: Empty pivot table. Last filtered dataframe had {len(filtered_df)} rows.")
+    #     print(f"DEBUG: Last filtered dataframe sample: {filtered_df.head(3).to_dict()}")
+
 
     # Sort by row totals
     row_totals = pivot_df.sum(axis=1).sort_values(ascending=False)
@@ -115,35 +180,40 @@ def create_heatmap(
         weighted_avg = weighted_sum / entity1_totals.sum()
         weighted_avg_by_entity2[entity2] = weighted_avg
 
-    weighted_avg_series = pd.Series(weighted_avg_by_entity2).sort_values(
-        ascending=False
-    )
-
     # Collect p-values for all tests
     pvalues = []
     test_indices = []
+    
+    # Create p-value table - one table for all combinations of row and column
+    # with p-values and original counts
+    pvalue_table = pd.DataFrame(index=pivot_df.index, columns=pivot_df.columns)
+    count_table = pivot_df.copy()
 
     # Perform statistical significance testing with improved approach
     min_sample_size = 30  # Minimum sample size for reliable testing
+    
+    # print(f"DEBUG: Check point 1")
 
     for row_idx in pivot_df.index:
         for col_idx in pivot_df.columns:
+            # print(f"DEBUG: row_idx {row_idx} and col_idx {col_idx}")
             # Skip cells with zero counts or small sample sizes
-            if (
-                pivot_df.loc[row_idx, col_idx] == 0
-                or entity1_totals[row_idx] < min_sample_size
-            ):
-                continue
-
-            # Get counts for this cell
             count = pivot_df.loc[row_idx, col_idx]
             row_total = entity1_totals[row_idx]
+            
+            # Default p-value is 1.0 (not significant)
+            p_value = 1.0
+            
+            if count == 0 or row_total < min_sample_size:
+                pvalue_table.loc[row_idx, col_idx] = f"{p_value:.4f} ({int(count)})"
+                continue
 
             # Calculate observed proportion
             observed_prop = count / row_total
-
+            # print(f"DEBUG: observed_prop {observed_prop}")
             # Get weighted average (expected proportion)
             expected_prop = weighted_avg_by_entity2[col_idx]
+            # print(f"DEBUG: expected_prop {expected_prop}")
 
             # Handle NaN or Infinity values
             if (
@@ -152,10 +222,12 @@ def create_heatmap(
                 or np.isinf(observed_prop)
                 or np.isinf(expected_prop)
             ):
+                pvalue_table.loc[row_idx, col_idx] = f"{p_value:.4f} ({int(count)})"
                 continue
 
             # Only test if observed is higher than expected
             if observed_prop <= expected_prop:
+                pvalue_table.loc[row_idx, col_idx] = f"{p_value:.4f} ({int(count)})"
                 continue
 
             # Calculate effect size - how substantial is the difference?
@@ -163,6 +235,7 @@ def create_heatmap(
 
             # Skip very small effect sizes (meaningful difference threshold) or NaN values
             if pd.isna(effect_size) or effect_size < min_effect_size_prop:
+                pvalue_table.loc[row_idx, col_idx] = f"{p_value:.4f} ({int(count)})"
                 continue
 
             # Perform z-test for proportions
@@ -178,6 +251,9 @@ def create_heatmap(
 
             # P-value (one-tailed test)
             p_value = 1 - stats.norm.cdf(z_score)
+            
+            # Store the p-value in the table with the count
+            pvalue_table.loc[row_idx, col_idx] = f"{p_value:.4f} ({int(count)})"
 
             # Store p-value and indices for later correction
             pvalues.append(p_value)
@@ -187,6 +263,9 @@ def create_heatmap(
     significance_df = pd.DataFrame(
         index=pivot_df.index, columns=pivot_df.columns, data=False
     )
+
+    # print(f"DEBUG: Check point 2")
+    # print(significance_df)
 
     # Apply multiple testing correction if requested and if we have any tests
     if pvalues and correct_multiple_tests:
@@ -199,6 +278,10 @@ def create_heatmap(
         for i, (row_idx, col_idx) in enumerate(test_indices):
             is_significant = reject[i]
             significance_df.loc[row_idx, col_idx] = is_significant
+            
+            # Update the p-value in the table with the corrected p-value
+            count = int(pivot_df.loc[row_idx, col_idx])
+            pvalue_table.loc[row_idx, col_idx] = f"{pvals_corrected[i]:.4f} ({count})"
     else:
         # Use uncorrected p-values
         for i, (row_idx, col_idx) in enumerate(test_indices):
@@ -314,7 +397,7 @@ def create_heatmap(
         working_pivot = row_reduced_pivot
         working_significance_df = new_row_significance_df
 
-    # Update our working DataFrames for visualization
+    # Update our working DataFrames for visualisation
     pivot_df_top = working_pivot
     significance_df_top = working_significance_df
 
@@ -325,8 +408,11 @@ def create_heatmap(
     viz_df = pivot_df_top.copy()
     row_sums = viz_df.sum(axis=1)
     viz_df = viz_df.div(row_sums, axis=0)
+    # Ensure all values are float64 (not Float64/nullable type)
+    viz_df = viz_df.astype('float64')
     fmt = ".2f"
 
+    figsize=(16, 10)
     # Calculate appropriate figure height based on number of rows (minimum 12, increased from 10)
     # Add a multiplier to increase the overall height
     adjusted_height = max(12, len(viz_df) * 0.6)  # Increased from 0.5 to 0.6
@@ -479,15 +565,14 @@ def create_heatmap(
     # Adjust the spacing between subplots to increase the gap between heatmap and annotations
     plt.subplots_adjust(hspace=0.2)  # Increased from 0.05 to 0.2
 
-    # Return the original pivot table, weighted averages, and significance results
-    return fig, pivot_df
+    # Return the figure, DataFrame, and p-value table
+    return fig, pivot_df, pvalue_table
 
 
 def create_heatmap_packing_week(
     df,
     col_col,
     value_col,
-    figsize=(16, 20),
     significance_level=0.05,
     correct_multiple_tests=True,
     min_effect_size=2.5,
@@ -504,24 +589,19 @@ def create_heatmap_packing_week(
         Column name to use for columns (entity)
     value_col : str
         Column name to use for values/counts
-    figsize : tuple, optional
-        Figure size (width, height)
     significance_level : float, optional
         Alpha level for statistical significance testing (default 0.05)
     correct_multiple_tests : bool, optional
         Whether to apply correction for multiple testing (default True)
     min_effect_size : float, optional
         Minimum percentage point difference required for significance testing (default 2.5)
-    top_n : int
-        Number of top entity categories to show individually. The rest will be grouped as "Other".
 
     Returns:
     --------
-    tuple: (pivot_df, ordered_pivot, weighted_avg_series, significance_df)
+    tuple: (fig, pivot_df, pvalue_df)
+        - fig: The heatmap figure
         - pivot_df: The original pivot table with raw counts
-        - ordered_pivot: The pivot table ordered chronologically by packing_week and limited to top_n columns
-        - weighted_avg_series: Series containing weighted average percentages for each entity
-        - significance_df: DataFrame indicating which cells are significantly above average
+        - pvalue_df: DataFrame containing p-values and cell values for all row/column combinations
     """
     import numpy as np
     import pandas as pd
@@ -531,22 +611,35 @@ def create_heatmap_packing_week(
     from statsmodels.stats.multitest import multipletests
     import matplotlib.gridspec as gridspec
 
-    plt.ioff()  # Turn off interactive mode
-
-    # Format entity name for display
-    entity_name = col_col.replace("_", " ").title()
-
-    # Create title if not provided
-    title = f"Heatmap of Packing Week by {entity_name}"
+    row_col = 'packing_week'
+    # Validate input parameters
+    if df is None or len(df) == 0:
+        raise ValueError("Input dataframe is empty or None")
+        
+    if row_col not in df.columns:
+        raise ValueError(f"Row column '{row_col}' not found in dataframe")
+        
+    if col_col not in df.columns:
+        raise ValueError(f"Column column '{col_col}' not found in dataframe")
+        
+    if value_col not in df.columns:
+        raise ValueError(f"Value column '{value_col}' not found in dataframe")
+    
+    # Make a copy to avoid modifying the original dataframe
+    df_copy = df.copy()
 
     # Start with create_heatmap functionality
     # Convert min_effect_size from percentage points to proportion
     min_effect_size_prop = min_effect_size / 100
 
     row_col = "packing_week"
-    filtered_df = df.dropna(subset=[row_col, col_col])
+    filtered_df = df_copy.dropna(subset=[row_col, col_col])
     filtered_df = filtered_df[filtered_df[row_col] != "None"]
     filtered_df = filtered_df[filtered_df[col_col] != "None"]
+        
+    # Convert row and column values to strings for safety
+    filtered_df[row_col] = filtered_df[row_col].astype(str)
+    filtered_df[col_col] = filtered_df[col_col].astype(str)
 
     # Validate measure parameter
     if value_col not in ["container_number", "std_cartons", "income"]:
@@ -579,6 +672,18 @@ def create_heatmap_packing_week(
             aggfunc="sum",
             fill_value=0,
         )
+        
+    # Check if pivot_df is empty
+    if pivot_df.empty:
+        raise ValueError("Pivot table is empty. Check your input data and column selections.")
+
+    # Sort by row totals
+    row_totals = pivot_df.sum(axis=1).sort_values(ascending=False)
+    pivot_df = pivot_df.loc[row_totals.index]
+
+    # Sort by column totals
+    col_totals = pivot_df.sum(axis=0).sort_values(ascending=False)
+    pivot_df = pivot_df[col_totals.index]
 
     # Calculate weighted averages
     entity1_totals = pivot_df.sum(axis=1)
@@ -594,6 +699,10 @@ def create_heatmap_packing_week(
         ascending=False
     )
 
+    # Create p-value table - one table for all combinations of row and column
+    # with p-values and original counts
+    pvalue_table = pd.DataFrame(index=pivot_df.index, columns=pivot_df.columns)
+
     # Perform statistical significance testing
     # Collect p-values for all tests
     pvalues = []
@@ -604,16 +713,17 @@ def create_heatmap_packing_week(
 
     for row_idx in pivot_df.index:
         for col_idx in pivot_df.columns:
-            # Skip cells with zero counts or small sample sizes
-            if (
-                pivot_df.loc[row_idx, col_idx] == 0
-                or entity1_totals[row_idx] < min_sample_size
-            ):
-                continue
-
             # Get counts for this cell
             count = pivot_df.loc[row_idx, col_idx]
             row_total = entity1_totals[row_idx]
+            
+            # Default p-value is 1.0 (not significant)
+            p_value = 1.0
+            
+            # Skip cells with zero counts or small sample sizes
+            if count == 0 or row_total < min_sample_size:
+                pvalue_table.loc[row_idx, col_idx] = f"{p_value:.4f} ({int(count)})"
+                continue
 
             # Calculate observed proportion
             observed_prop = count / row_total
@@ -628,10 +738,12 @@ def create_heatmap_packing_week(
                 or np.isinf(observed_prop)
                 or np.isinf(expected_prop)
             ):
+                pvalue_table.loc[row_idx, col_idx] = f"{p_value:.4f} ({int(count)})"
                 continue
 
             # Only test if observed is higher than expected
             if observed_prop <= expected_prop:
+                pvalue_table.loc[row_idx, col_idx] = f"{p_value:.4f} ({int(count)})"
                 continue
 
             # Calculate effect size - how substantial is the difference?
@@ -639,6 +751,7 @@ def create_heatmap_packing_week(
 
             # Skip very small effect sizes (meaningful difference threshold) or NaN values
             if pd.isna(effect_size) or effect_size < min_effect_size_prop:
+                pvalue_table.loc[row_idx, col_idx] = f"{p_value:.4f} ({int(count)})"
                 continue
 
             # Perform z-test for proportions
@@ -654,6 +767,9 @@ def create_heatmap_packing_week(
 
             # P-value (one-tailed test)
             p_value = 1 - stats.norm.cdf(z_score)
+            
+            # Store the p-value in the table with the count
+            pvalue_table.loc[row_idx, col_idx] = f"{p_value:.4f} ({int(count)})"
 
             # Store p-value and indices for later correction
             pvalues.append(p_value)
@@ -675,6 +791,10 @@ def create_heatmap_packing_week(
         for i, (row_idx, col_idx) in enumerate(test_indices):
             is_significant = reject[i]
             significance_df.loc[row_idx, col_idx] = is_significant
+            
+            # Update the p-value in the table with the corrected p-value
+            count = int(pivot_df.loc[row_idx, col_idx])
+            pvalue_table.loc[row_idx, col_idx] = f"{pvals_corrected[i]:.4f} ({count})"
     else:
         # Use uncorrected p-values
         for i, (row_idx, col_idx) in enumerate(test_indices):
@@ -707,12 +827,15 @@ def create_heatmap_packing_week(
     # Calculate row totals for use in normalization and row counts
     new_entity1_totals = ordered_pivot.sum(axis=1)
 
-    # Create normalized version for visualization
+    # Create normalized version for visualisation
     viz_df = ordered_pivot.copy()
     row_sums = viz_df.sum(axis=1)
     viz_df = viz_df.div(row_sums, axis=0)
+    # Ensure all values are float64 (not Float64/nullable type)
+    viz_df = viz_df.astype('float64')
 
     # Calculate appropriate figure height based on number of rows (minimum height from figsize[1])
+    figsize=(16, 20)
     adjusted_height = max(figsize[1], len(viz_df) * 0.5)
     adjusted_width = figsize[0]
 
@@ -844,16 +967,15 @@ def create_heatmap_packing_week(
             color="black",
         )
 
-    # Create footnote text about statistical testing
+    # Add a footnote with statistical test information
     test_method = (
-        "with FDR correction for multiple testing"
+        "with FDR correction for multiple tests"
         if correct_multiple_tests
-        else "without correction for multiple testing"
+        else "without correction for multiple tests"
     )
-
     footnote_text = (
         f"* Statistically significant higher proportion at α={significance_level} {test_method}\n"
-        f"  (Requires >{min_effect_size}% difference and minimum sample size of {min_sample_size})"
+        f"  (Requires >{min_effect_size}% difference and minimum sample size of {min_sample_size})\n\n"
     )
 
     # Create a formatted string of weighted averages for top entities
@@ -872,366 +994,19 @@ def create_heatmap_packing_week(
     footnote_ax.axis("off")  # Hide the axis
     footnote_ax.text(
         0.01,
-        0.99,
+        1.0,
         footnote_text,
         fontsize=footnote_size,
-        color="black",
-        verticalalignment="top",
         transform=footnote_ax.transAxes,
+        verticalalignment="top",
     )
 
-    # Set title and labels
+    entity_name = col_col.replace("_", " ").title()
+    title = f"Heatmap of Packing Week by {entity_name}"
+    
     ax.set_title(title, fontsize=title_size, pad=20)
     plt.sca(ax)  # Set ax as the current axis
     plt.xticks(rotation=45, ha="right")
-    plt.yticks(rotation=0)
-
-    # Adjust the spacing between subplots to avoid overlap
-    plt.subplots_adjust(hspace=0.05)
-
-    return fig, ordered_pivot
-
-
-def calculate_concentration_metrics(
-    df, entity1_col, entity2_col, value_col="container_number"
-):
-    """
-    Calculate concentration metrics between two columns in a dataframe.
-
-    Parameters:
-    -----------
-    df : pandas.DataFrame
-        The dataframe containing the data
-    entity1_col : str
-        The column name for the first entity (grouping variable)
-    entity2_col : str
-        The column name for the second entity (whose concentration will be measured)
-    value_col : str, default='container_number'
-        The column to use for measurement (container_number, std_cartons, income)
-
-    Returns:
-    --------
-    pandas.DataFrame
-        A dataframe with the following columns for each entity1:
-        - aggregated measurement (container_number, std_cartons, income)
-        - normalized HHI (formatted to 2 decimal places)
-        - percentage of pallets going to the largest entity2 (formatted to 2 decimal places)
-
-        The dataframe is sorted by unique_pallets in descending order.
-    """
-    import traceback
-
-    try:
-        # Debug: Check input dataframe
-        print(f"Input dataframe shape: {df.shape}")
-        print(f"Input dataframe columns: {df.columns.tolist()}")
-        print(
-            f"Entity1 column: {entity1_col}, Entity2 column: {entity2_col}, Value column: {value_col}"
-        )
-
-        # Check if required columns exist
-        missing_cols = [
-            col
-            for col in [entity1_col, entity2_col, value_col]
-            if col not in df.columns
-        ]
-        if missing_cols:
-            raise ValueError(f"Missing required columns: {missing_cols}")
-
-        # Create a copy to avoid modifying the original dataframe
-        data = df.dropna(subset=[entity1_col, entity2_col])
-        data = data[data[entity1_col] != "None"]
-        data = data[data[entity2_col] != "None"]
-
-        print(f"Filtered data shape: {data.shape}")
-
-        if data.empty:
-            raise ValueError("No valid data after filtering")
-
-        # Determine the measurement method based on value_col
-        if value_col == "container_number":
-            # Step 1: Calculate entity preferences (distribution of entity2 for each entity1)
-            entity_preferences = (
-                data.groupby([entity1_col, entity2_col])["container_number"]
-                .nunique()
-                .reset_index(name="total")
-            )
-
-            # Calculate the total pallet count for each entity1
-            entity1_totals = (
-                data.groupby(entity1_col)["container_number"]
-                .nunique()
-                .reset_index(name="grand_total")
-            )
-
-            measurement_name = "containers"
-        elif value_col == "std_cartons":
-            # Use standard cartons instead of pallet counts
-            entity_preferences = (
-                data.groupby([entity1_col, entity2_col])["std_cartons"]
-                .sum()
-                .reset_index(name="total")  # keep column name for consistency
-            )
-
-            # Calculate the total cartons for each entity1
-            entity1_totals = (
-                data.groupby(entity1_col)["std_cartons"]
-                .sum()
-                .reset_index(name="grand_total")  # keep column name for consistency
-            )
-
-            measurement_name = "std_cartons"
-        else:  # value_col == "income"
-            # Use revenue instead of pallet counts
-            entity_preferences = (
-                data.groupby([entity1_col, entity2_col])["income"]
-                .sum()
-                .reset_index(name="total")  # keep column name for consistency
-            )
-
-            # Calculate the total revenue for each entity1
-            entity1_totals = (
-                data.groupby(entity1_col)["income"]
-                .sum()
-                .reset_index(name="grand_total")  # keep column name for consistency
-            )
-
-            measurement_name = "revenue"
-
-        print(f"Entity preferences shape: {entity_preferences.shape}")
-        print(f"Entity1 totals shape: {entity1_totals.shape}")
-
-        # Merge the total counts back to get percentages
-        entity_preferences = entity_preferences.merge(entity1_totals, on=entity1_col)
-        entity_preferences["percentage"] = (
-            entity_preferences["total"] / entity_preferences["grand_total"]
-        ) * 100
-        entity_preferences["percentage_prop"] = entity_preferences["percentage"] / 100
-
-        print(f"Merged entity preferences shape: {entity_preferences.shape}")
-
-        # Step 2: Calculate metrics for each entity1
-        results = []
-        for name, group in entity_preferences.groupby(entity1_col):
-            # Count unique pallets for this entity1
-            grand_total = group["grand_total"].iloc[0]
-
-            # Calculate raw HHI
-            hhi = sum(group["percentage_prop"] ** 2)
-
-            # Count distinct entity2 values
-            distinct_entity2_count = len(group)
-
-            # Calculate normalized HHI
-            normalized_hhi = (
-                1.0
-                if distinct_entity2_count == 1
-                else (hhi - 1 / distinct_entity2_count)
-                / (1 - 1 / distinct_entity2_count)
-            )
-
-            # Find entity2 with the highest pallet count
-            top_entity2_row = group.loc[group["total"].idxmax()]
-            top_entity2 = top_entity2_row[entity2_col]
-            top_entity2_measurement = top_entity2_row["total"]
-
-            # Calculate percentage of total pallets for the top entity2
-            top_entity2_percentage = (top_entity2_measurement / grand_total) * 100
-
-            results.append(
-                {
-                    entity1_col: name,
-                    "grand_total": grand_total,
-                    "normalized_hhi": round(normalized_hhi, 2),
-                    f"distinct_{entity2_col}_count": distinct_entity2_count,
-                    f"top_{entity2_col}": top_entity2,
-                    f"top_{entity2_col}_percentage": round(top_entity2_percentage, 2),
-                    "measurement": measurement_name,
-                }
-            )
-
-        print(f"Number of results: {len(results)}")
-
-        # Convert results to dataframe
-        result_df = pd.DataFrame(results)
-
-        print(f"Result dataframe shape: {result_df.shape}")
-        print(f"Result dataframe columns: {result_df.columns.tolist()}")
-
-        # Sort by pallets in descending order
-        result_df = result_df.sort_values(by="grand_total", ascending=False)
-
-        return result_df
-    except Exception as e:
-        print(f"Error in calculate_concentration_metrics: {str(e)}")
-        print(traceback.format_exc())
-        raise
-
-
-def plot_concentration_bubble(metrics_df):
-    """
-    Create a simple bubble chart visualization from concentration metrics data.
-
-    Parameters:
-    -----------
-    metrics_df : pandas.DataFrame
-        The dataframe output from calculate_concentration_metrics function
-
-    Returns:
-    --------
-    fig : matplotlib.figure.Figure
-        The figure containing the visualization
-    """
-    import traceback
-
-    try:
-        df = metrics_df.copy()
-
-        # Debug: Check if dataframe is empty
-        if df.empty:
-            raise ValueError("The metrics dataframe is empty")
-
-        # Debug: Print column names
-        print(f"Dataframe columns: {df.columns.tolist()}")
-
-        # Extract entity column name (first column)
-        if len(df.columns) == 0:
-            raise ValueError("The metrics dataframe has no columns")
-
-        entity_col = df.columns[0]
-        print(f"Entity column: {entity_col}")
-
-        # Get top entity column name and percentage column
-        top_entity_cols = [
-            col
-            for col in df.columns
-            if col.startswith("top_") and not col.endswith("percentage")
-        ]
-        print(df.columns)
-
-        if not top_entity_cols:
-            raise ValueError(
-                f"No top entity columns found. Available columns: {df.columns.tolist()}"
-            )
-
-        top_entity_col = top_entity_cols[0]
-        top_pct_col = f"{top_entity_col}_percentage"
-        print(f"Top entity column: {top_entity_col}, Percentage column: {top_pct_col}")
-
-        # Extract entity2_col from top_entity_col by removing "top_" prefix
-        entity2_col = top_entity_col.replace("top_", "")
-
-        # Get measurement type from the metrics dataframe
-        measurement = (
-            df["measurement"].iloc[0] if "measurement" in df.columns else "pallets"
-        )
-        print(f"Measurement: {measurement}")
-
-        # Define axis label based on measurement
-        y_axis_label = {
-            "pallets": "Number of Pallets",
-            "cartons": "Number of Standard Cartons",
-            "revenue": "Total Revenue (ZAR)",
-        }.get(measurement, "Value")
-
-        # Filter data if threshold is provided
-        plot_data = df[df["grand_total"] >= 50]
-        print(f"Filtered data shape: {plot_data.shape}")
-
-        if plot_data.empty:
-            raise ValueError(
-                "No data points meet the threshold criteria (grand_total >= 50)"
-            )
-
-        # Create figure and axes
-        fig, ax = plt.subplots(figsize=(12, 8))
-
-        # Create color map from blue (low concentration) to red (high concentration)
-        colors = ["#4575b4", "#91bfdb", "#e0f3f8", "#fee090", "#fc8d59", "#d73027"]
-        cmap = LinearSegmentedColormap.from_list("concentration", colors)
-
-        # Create bubble chart
-        scatter = ax.scatter(
-            plot_data["normalized_hhi"],
-            plot_data["grand_total"],
-            s=plot_data["grand_total"]
-            / plot_data["grand_total"].max()
-            * 500,  # Size based on pallets
-            c=plot_data[top_pct_col],  # Color based on percentage of top entity
-            cmap=cmap,
-            alpha=0.7,
-            edgecolors="k",
-        )
-
-        # Add labels to significant points
-        for i, row in plot_data.iterrows():
-            if row["grand_total"] > plot_data["grand_total"].max() * 0.05:
-                ax.annotate(
-                    row[entity_col],
-                    (row["normalized_hhi"], row["grand_total"]),
-                    xytext=(5, 0),
-                    textcoords="offset points",
-                    fontsize=9,
-                    fontweight="bold",
-                )
-
-        # Add colorbar
-        cbar = plt.colorbar(scatter, ax=ax)
-        cbar.set_label(f"% of {measurement} to top {entity2_col}")
-
-        # Set titles and labels
-        ax.set_title(
-            f"{entity2_col} Concentration Analysis by {entity_col}", fontsize=14
-        )
-
-        ax.set_xlabel(
-            "Normalized HHI (0 = Even Distribution, 1 = Complete Concentration)",
-            fontsize=12,
-        )
-        ax.set_ylabel(y_axis_label, fontsize=12)
-
-        # Add grid
-        ax.grid(True, linestyle="--", alpha=0.7)
-
-        plt.tight_layout()
-
-        return fig
-    except Exception as e:
-        print(f"Error in plot_concentration_bubble: {str(e)}")
-        print(traceback.format_exc())
-        raise
-
-
-def save_figures_to_pdf(figures, output_path, title):
-    """
-    Save multiple matplotlib figures to a single PDF file with proper layout preservation.
-
-    Parameters:
-    -----------
-    figures : list
-        List of matplotlib figure objects to save
-    output_path : str or Path
-        Path where the PDF will be saved
-    title : str
-        Title for the PDF metadata
-    """
-    with PdfPages(output_path) as pdf:
-        for i, fig in enumerate(figures):
-            # Do NOT call tight_layout again as it will override the careful
-            # layout settings we've already applied in the figure creation functions
-
-            # Save the figure to the PDF with proper bounding box to include all elements
-            pdf.savefig(fig, bbox_inches="tight", pad_inches=0.5)
-
-            # Close the figure to free memory
-            plt.close(fig)
-
-        # Add metadata to the PDF
-        d = pdf.infodict()
-        d["Title"] = title
-        d["Author"] = "Data Science Team"
-        d["Subject"] = "Market Concentration Analysis"
-        d["Keywords"] = "concentration, market analysis, HHI"
-        d["CreationDate"] = datetime.datetime.today()
-
-    print(f"PDF saved to {output_path}")
+    
+    # Return the figure, DataFrame, and p-value table
+    return fig, pivot_df, pvalue_table

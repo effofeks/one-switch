@@ -107,19 +107,32 @@ def render_visualisation_selector():
     """Render visualisation type selector in the sidebar."""
     st.sidebar.header("Visualisation")
 
-    # Select visualisation type
+    # Select main visualisation type
     viz_type = st.sidebar.selectbox(
         "Select Visualisation Type",
-        [
-            "Buyer-Seller Relationship", 
-            "Individual Company Network", 
-            "Network Timelapse", 
-            "Heatmap", 
-            "Packing Week Heatmap",
-            "Concentration Bubble Plot"
-        ],
+        ["Network", "Heatmap"],
     )
-
+    
+    # Initialize session state for network subtype if needed
+    if "network_subtype" not in st.session_state:
+        st.session_state.network_subtype = "by strongest relationship"
+        
+    # If Network is selected, show sub-type options
+    if viz_type == "Network":
+        network_subtype = st.sidebar.selectbox(
+            "Network type",
+            ["by strongest relationship", "by company", "timelapse"],
+            key="network_subtype"
+        )
+        
+        # Map network subtype to original visualisation type
+        if network_subtype == "by strongest relationship":
+            return "Buyer-Seller Relationship"
+        elif network_subtype == "by company":
+            return "Individual Company Network"
+        elif network_subtype == "timelapse":
+            return "Network Timelapse"
+    
     return viz_type
 
 
@@ -255,6 +268,7 @@ def render_heatmap_params():
     all_variables = [
         "commodity_name", "variety_name", "production_region", "seller_id", "buyer_id", 
         "local_market", "target_country", "jbin", "size_count", "size_categorization", "class",
+        "packing_week"
     ]
     
     # Initialize session state tracking variables with different keys than the widget keys
@@ -353,7 +367,11 @@ def render_heatmap_params():
     
     # Button to generate visualisation
     generate_viz = st.sidebar.button("Generate Heatmap")
-
+    
+    # Check if this is a packing week heatmap
+    is_packing_week_heatmap = (row_col == "packing_week")
+    
+    # Return parameters based on whether this is a packing week heatmap
     return {
         "row_col": row_col,
         "col_col": col_col,
@@ -361,7 +379,9 @@ def render_heatmap_params():
         "significance_level": significance_level,
         "correct_multiple_tests": correct_multiple_tests,
         "min_effect_size": min_effect_size,
+        "is_packing_week_heatmap": is_packing_week_heatmap,
     }, generate_viz
+
 
 
 def render_packing_week_heatmap_params():
@@ -439,76 +459,10 @@ def render_packing_week_heatmap_params():
     }, generate_viz
 
 
-def render_concentration_bubble_params():
-    """Render parameters for Concentration Bubble Plot visualisation."""
-    st.sidebar.subheader("Concentration Bubble Plot Parameters")
-
-    # All available variables for grouping
-    primary_variables = [
-        "commodity_name", "variety_name", "production_region", "seller_id", "buyer_id", 
-        "local_market", "target_country", "jbin", "size_count", "packing_week"
-    ]
-    
-    # Variables for concentration measurement
-    secondary_variables = [
-        "buyer_id", "target_country"
-    ]
-    # Select entity parameters
-    entity1_col = st.sidebar.selectbox(
-        "Primary Variable (Grouping)", 
-        primary_variables,
-        key="bubble_primary_var",
-        help="Main grouping variable"
-    )
-    
-    entity2_col = st.sidebar.selectbox(
-        "Secondary Variable (Concentration)", 
-        secondary_variables,
-        key="bubble_secondary_var",
-        help="Variable to measure concentration for"
-    )
-    
-    # Add measure selection
-    measure = st.sidebar.selectbox(
-        "Measure",
-        ["containers", "std_cartons", "revenue"],
-        help="Measure to use for concentration calculation"
-    )
-    
-    # Map the selected measure to the appropriate value column
-    if measure == "containers":
-        value_col = "container_number"
-    elif measure == "std_cartons":
-        value_col = "std_cartons"
-    else:  # revenue
-        value_col = "income"
-    
-    # Button to generate visualisation
-    generate_viz = st.sidebar.button("Generate Concentration Bubble Plot")
-
-    return {
-        "entity1_col": entity1_col,
-        "entity2_col": entity2_col,
-        "value_col": value_col,
-        "measure": measure,
-    }, generate_viz
-
-
 def render_data_preview(df, expanded=True):
     """Render a preview of the loaded data."""
-    with st.expander("Data preview", expanded=expanded):
+    with st.expander("Data Preview", expanded=expanded):
         if df is not None:
-            # Display data stats from the aggregated dataframe
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Total Carton Groupings", sum(df['n_cg']))
-            with col2:
-                st.metric("Unique Buyers", df["buyer_id"].nunique())
-            with col3:
-                st.metric("Unique Sellers", df["seller_id"].nunique())
-
-            # Show both aggregated data and raw preview
-            st.subheader("Carton Grouping Data")
-            st.dataframe(df.head(5))
+            st.dataframe(df.head(10))
         else:
-            st.error("Data not loaded. Please load the data to view the preview.") 
+            st.info("No data loaded. Use the filters in the sidebar to load data.") 
