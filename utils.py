@@ -1,13 +1,14 @@
 from pathlib import Path
 from sqlalchemy import URL
+import streamlit as st
 
 DB_URL = URL.create(
     drivername="postgresql",
-    username="warehouse",
-    password="warehouse",
-    host="localhost",
-    port=8432,
-    database="warehouse",
+    username=st.secrets["DB_USERNAME"],
+    password=st.secrets["DB_PASSWORD"],
+    host=st.secrets["DB_HOST"],
+    port=st.secrets["DB_PORT"],
+    database=st.secrets["DB_NAME"],
 )
 SCRIPTS_PATH = Path("scripts")
 OUTPUT_PATH = Path("output")
