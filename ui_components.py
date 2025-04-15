@@ -267,8 +267,8 @@ def render_current_visualisation(current_html, current_plot):
         # Add interpretation expander for heatmaps if applicable (though unlikely with HTML)
         if is_heatmap:
             from viz_utils import get_heatmap_interpretation
-            with st.expander("📖 Interpretation Guide", expanded=False):
-                st.markdown(get_heatmap_interpretation())
+            # with st.expander("📖 Interpretation Guide", expanded=False):
+            #     st.markdown(get_heatmap_interpretation())
         
         st.markdown(current_html, unsafe_allow_html=True)
     elif current_plot:
@@ -295,8 +295,33 @@ def render_current_visualisation(current_html, current_plot):
         
         # For heatmap visualizations, add interpretation guide
         if is_heatmap:
-            with st.expander("📖 Interpretation Guide", expanded=False):
-                st.markdown(get_heatmap_interpretation())
+            # with st.expander("📖 Interpretation Guide", expanded=False):
+            #     st.markdown(get_heatmap_interpretation())
+                
+            # Add usage example expander below the interpretation guide
+            with st.expander("🎓 Usage Example", expanded=True):
+                st.markdown("""
+For 2024 citrus data, we explore the relationship between variety and target country for standard carton volumes. Consider the **Star Ruby** and **Japan** pair with a **cell value of 12%**:
+
+
+What the cell value means:
+- The 12% is a row-normalized proportion.
+- This means 12% of all Star Ruby volume went to Japan.
+- Each row (variety) sums to 100%, showing how that variety is distributed across countries.
+
+What the statistical test examines:
+- The Chi-squared test for independence asks: _Is the distribution of Star Ruby across countries different from what we’d expect if variety and country were unrelated?_
+- The asterisk (*) means the observed value (12%) is significantly higher than expected under this assumption of independence.
+
+In practical terms:
+- The cell values show how a variety’s volume is split across target countries.
+- Significance markers (* or †) flag when this pattern is unusual — either stronger or weaker than what the overall data trends would predict.
+- A significant result suggests the variety-country pair has a distinctive relationship, not explained by general popularity alone.
+- The chosen significance level of 5% means that cells are flagged as significant if the observed value is less than 5% likely to occur by chance.
+- The chosen minimum effect size of 5% means that cells are flagged as significant if the observed value is at least 5% different from what would be expected by chance.
+ - Together, the significance level and minimum effect size ensure that only substantial and reliable deviations are highlighted.
+
+""")
         
         # Create a container for the export button and align it to the right
         _, right_col = st.columns([4, 1])
