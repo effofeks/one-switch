@@ -438,7 +438,7 @@ def create_standard_heatmap(params):
         'value_col': params.get('value_col'),
         'significance_level': params.get('significance_level', 0.05),
         'correct_multiple_tests': params.get('correct_multiple_tests', True),
-        'min_effect_size': params.get('min_effect_size', 2.5)
+        'min_effect_size': params.get('min_effect_size', 5.0)
     }
     
     # Remove None values
@@ -463,7 +463,7 @@ def create_packing_week_heatmap(params):
         'value_col': params.get('value_col'),
         'significance_level': params.get('significance_level', 0.05),
         'correct_multiple_tests': params.get('correct_multiple_tests', True),
-        'min_effect_size': params.get('min_effect_size', 2.5)
+        'min_effect_size': params.get('min_effect_size', 5.0)
     }
     
     # Remove None values

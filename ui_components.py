@@ -72,7 +72,7 @@ def render_header():
     # Application title with custom styling
     st.markdown('<h1 class="main-header">OneSwitch Data Explorer</h1>', unsafe_allow_html=True)
     st.markdown(
-        '<p class="sub-header">Explore data through a set of visualisations</p>',
+        '<p class="sub-header">Visualise relationships and uncover statistically significant patterns in trade network data.</p>',
         unsafe_allow_html=True,
     )
 
@@ -111,6 +111,7 @@ def render_visualisation_selector():
     viz_type = st.sidebar.selectbox(
         "Select Visualisation Type",
         ["Network", "Heatmap"],
+        index=1,  # Default to Heatmap
     )
     
     # Initialize session state for network subtype if needed
@@ -254,9 +255,56 @@ def render_network_timelapse_params():
 
 def render_current_visualisation(current_html, current_plot):
     """Render the current visualisation."""
+    # Check if the current visualization is a heatmap type
+    is_heatmap = False
+    if "visualisation" in st.session_state and st.session_state.visualisation["type"]:
+        viz_type = st.session_state.visualisation["type"]
+        if "heatmap" in viz_type.lower() or viz_type == "Heatmap":
+            is_heatmap = True
+
     if current_html:
+        # For HTML visualizations like network timelapse
+        # Add interpretation expander for heatmaps if applicable (though unlikely with HTML)
+        if is_heatmap:
+            from viz_utils import get_heatmap_interpretation
+            with st.expander("📖 Interpretation Guide", expanded=False):
+                st.markdown(get_heatmap_interpretation())
+        
         st.markdown(current_html, unsafe_allow_html=True)
     elif current_plot:
+        # Import the export function
+        from viz_utils import export_plot_as_png, get_heatmap_interpretation
+        
+        # Get a descriptive filename based on session state if available
+        if "visualisation" in st.session_state and st.session_state.visualisation["type"]:
+            viz_type = st.session_state.visualisation["type"]
+            if viz_type == "standard_heatmap":
+                # For heatmap, use row_col and col_col in the filename
+                params = st.session_state.visualisation["params"]
+                row_col = params.get("row_col", "").replace("_", "-")
+                col_col = params.get("col_col", "").replace("_", "-")
+                filename = f"heatmap-{row_col}-by-{col_col}.png"
+            elif "network" in viz_type.lower():
+                # For network visualizations
+                filename = f"{viz_type.lower().replace(' ', '-')}.png"
+            else:
+                # Default filename
+                filename = f"plot-{viz_type.lower().replace(' ', '-')}.png"
+        else:
+            filename = "plot.png"
+        
+        # For heatmap visualizations, add interpretation guide
+        if is_heatmap:
+            with st.expander("📖 Interpretation Guide", expanded=False):
+                st.markdown(get_heatmap_interpretation())
+        
+        # Create a container for the export button and align it to the right
+        _, right_col = st.columns([4, 1])
+        with right_col:
+            # Add the export button
+            export_plot_as_png(current_plot, filename=filename)
+            
+        # Show the plot in a separate row
         st.pyplot(current_plot)
 
 
@@ -273,9 +321,9 @@ def render_heatmap_params():
     
     # Initialize session state tracking variables with different keys than the widget keys
     if "heatmap_row_var_value" not in st.session_state:
-        st.session_state.heatmap_row_var_value = "commodity_name"
+        st.session_state.heatmap_row_var_value = "variety_name"  # Default to variety_name
     if "heatmap_col_var_value" not in st.session_state:
-        st.session_state.heatmap_col_var_value = "local_market"
+        st.session_state.heatmap_col_var_value = "target_country"  # Default to target_country
     
     # Function to update the column variable when row changes
     def on_row_change():
@@ -335,6 +383,7 @@ def render_heatmap_params():
     measure = st.sidebar.selectbox(
         "Measure",
         ["containers", "std_cartons", "revenue"],
+        index=1,  # Default to std_cartons
         help="Measure to use for cell values"
     )
     
@@ -361,7 +410,7 @@ def render_heatmap_params():
     
     min_effect_size = st.sidebar.slider(
         "Minimum Effect Size (%)", 
-        0.5, 10.0, 2.5, 0.5,
+        0.5, 10.0, 5.0, 0.5,
         help="Minimum percentage point difference for significance"
     )
     
@@ -381,7 +430,6 @@ def render_heatmap_params():
         "min_effect_size": min_effect_size,
         "is_packing_week_heatmap": is_packing_week_heatmap,
     }, generate_viz
-
 
 
 def render_packing_week_heatmap_params():
@@ -461,7 +509,7 @@ def render_packing_week_heatmap_params():
 
 def render_data_preview(df, expanded=True):
     """Render a preview of the loaded data."""
-    with st.expander("Data Preview", expanded=expanded):
+    with st.expander("👀 Data Preview", expanded=expanded):
         if df is not None:
             st.dataframe(df.head(10))
         else:

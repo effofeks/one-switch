@@ -56,7 +56,7 @@ def get_strong_connection_focal_info(df, rank=1, measure="containers"):
     if df is None:
         return None
         
-    # Prepare the weighted edges dataframe - must exactly match the logic in visualize_strong_connections
+    # Prepare the weighted edges dataframe - must exactly match the logic in visualise_strong_connections
     if measure == "containers":
         weighted_edges_df = (
             df.dropna(subset=["buyer_id", "seller_id", "container_number"])
@@ -417,43 +417,70 @@ def format_heatmap_stats(data, params=None, metadata=None):
             
         param_dict["Significance Level"] = str(params.get("significance_level", 0.05))
         param_dict["Correct Multiple Tests"] = str(params.get("correct_multiple_tests", True))
-        param_dict["Minimum Effect Size"] = str(params.get("min_effect_size", 2.5))
+        param_dict["Minimum Effect Size"] = str(params.get("min_effect_size", 5.0))
             
         stats["Parameters"] = param_dict
         
         # Add p-value table if available in metadata
-        if metadata and "pvalue_table" in metadata:
+        if metadata and "pvalue_table" in metadata and "pivot_data" in metadata:
             pvalue_df = metadata["pvalue_table"]
+            pivot_df = metadata["pivot_data"]
             
-            # Format the p-value table
-            # The pvalue_df contains strings in format "0.xxxx (n)" 
-            # We need to extract the p-value and count, reformat them, and recombine
-            formatted_df = pvalue_df.copy()
-            
-            # Process each cell to reformat
-            for i in range(len(formatted_df.index)):
-                for j in range(len(formatted_df.columns)):
-                    cell_value = formatted_df.iloc[i, j]
+            try:
+                # Format the p-value table
+                # The pvalue_df contains strings in format "0.xxxx (n)" 
+                # We need to extract the p-value and count, reformat them, and recombine
+                formatted_df = pvalue_df.copy()
+                
+                # Process each cell to reformat
+                for i in range(len(formatted_df.index)):
+                    for j in range(len(formatted_df.columns)):
+                        cell_value = formatted_df.iloc[i, j]
+                        
+                        if cell_value and isinstance(cell_value, str):
+                            # Extract p-value and count using regex
+                            import re
+                            match = re.match(r"([\d\.]+) \((\d+)\)", cell_value)
+                            if match:
+                                p_value = float(match.group(1))
+                                count = int(match.group(2))
+                                
+                                # Format p-value as percentage with 1 decimal place
+                                p_value_fmt = f"{p_value * 100:.1f}%"
+                                
+                                # Format count with thousand separators (space)
+                                count_fmt = f"{count:,}".replace(",", " ")
+                                
+                                # Combine into new format
+                                formatted_df.iloc[i, j] = f"{p_value_fmt} ({count_fmt})"
+                
+                # Sort the table by totals (similar to how the heatmap is sorted)
+                # Calculate totals for rows and columns
+                try:
+                    # Calculate row and column totals from the pivot data
+                    row_totals = pivot_df.sum(axis=1).sort_values(ascending=False)
+                    col_totals = pivot_df.sum(axis=0).sort_values(ascending=False)
                     
-                    if cell_value and isinstance(cell_value, str):
-                        # Extract p-value and count using regex
-                        import re
-                        match = re.match(r"([\d\.]+) \((\d+)\)", cell_value)
-                        if match:
-                            p_value = float(match.group(1))
-                            count = int(match.group(2))
-                            
-                            # Format p-value as percentage with 1 decimal place
-                            p_value_fmt = f"{p_value * 100:.1f}%"
-                            
-                            # Format count with thousand separators (space)
-                            count_fmt = f"{count:,}".replace(",", " ")
-                            
-                            # Combine into new format
-                            formatted_df.iloc[i, j] = f"{p_value_fmt} ({count_fmt})"
-            
-            # Add the formatted table to stats
-            stats["P-Value Table"] = formatted_df
+                    # Filter to only include rows and columns in the formatted_df
+                    common_rows = [idx for idx in row_totals.index if idx in formatted_df.index]
+                    common_cols = [col for col in col_totals.index if col in formatted_df.columns]
+                    
+                    # Reorder the formatted DataFrame according to the totals, descending
+                    formatted_df = formatted_df.loc[common_rows, common_cols]
+                    
+                    # Add the sorted formatted table to stats
+                    stats["P-Value Table"] = formatted_df
+                except Exception as e:
+                    # If sorting fails, still show the table without sorting
+                    stats["P-Value Table"] = formatted_df
+                    stats["P-Value Table Sorting Error"] = str(e)
+            except Exception as e:
+                # Still include the original p-value table if formatting fails
+                stats["P-Value Table"] = pvalue_df
+                stats["P-Value Formatting Error"] = str(e)
+        elif metadata and "pvalue_table" in metadata:
+            # If we have p-values but no pivot data, still show the table
+            stats["P-Value Table"] = metadata["pvalue_table"]
             
         # Add data information analysis - ensure all fields exist
         if not isinstance(data, pd.DataFrame):
@@ -557,6 +584,13 @@ def display_visualisation_stats(stats):
         if isinstance(content, pd.DataFrame):
             # For P-Value Table, show the index (row names)
             if section == "P-Value Table":
+                st.text("The P-Value Table shows two-sided statistical testing based on a chi-squared independence model.")
+                st.markdown("""
+- The P-Value Table shows the statistical likelihood (as percentages) that the observed proportion difference could happen by chance.
+- Lower p-values suggest stronger evidence of a real association.
+- The number in parentheses shows the actual count of items in that cell.
+- Ordered by row and column totals to match the heatmap, making it easier to cross-reference.
+                            """)
                 st.dataframe(content)
             else:
                 # For other DataFrames, hide the index
@@ -610,4 +644,93 @@ def format_stats(visualisation):
             params["value_col"] = value_col
         return format_heatmap_stats(visualisation["data"], params, metadata)
     
-    return None 
+    return None
+
+
+def export_plot_as_png(fig, filename="plot.png", dpi=300):
+    """
+    Converts a matplotlib figure to a PNG image and creates a download button.
+    
+    Parameters:
+    -----------
+    fig : matplotlib.figure.Figure
+        The figure to be exported
+    filename : str, optional
+        The name of the file to be downloaded (default: "plot.png")
+    dpi : int, optional
+        The resolution of the exported image (default: 300)
+        
+    Returns:
+    --------
+    None
+    """
+    if fig is None:
+        st.warning("No plot available to export.")
+        return
+    
+    import io
+    
+    # Create a BytesIO buffer to save the figure
+    buf = io.BytesIO()
+    
+    # Save the figure to the buffer with specified DPI
+    fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight")
+    
+    # Set the buffer position to the beginning
+    buf.seek(0)
+    
+    # Create a download button
+    st.download_button(
+        label="📥 Export as PNG",
+        data=buf,
+        file_name=filename,
+        mime="image/png",
+        key="download_plot"
+    )
+
+
+def get_heatmap_interpretation():
+    """
+    Returns a detailed explanation of how to interpret heatmap visualisations.
+    
+    Returns:
+    --------
+    str
+        Markdown formatted text explaining heatmap interpretation
+    """
+    interpretation = """
+### Basic Structure
+- Each cell in the heatmap represents the proportion of the selected measure (e.g., standard cartons) for a specific row-column combination.
+- Colors intensity indicates the proportion value - darker cells have higher proportions.
+- Each row sums to 1 (or 100%), meaning the values show the distribution across columns for each row.
+- For example, if a cell shows 0.25 (or 25%), it means that 25% of the total value for that row went to that column.
+- This allows you to compare distribution patterns across different rows even when their total volumes differ significantly.
+- Rows with larger total values (shown in the rightmost column) contribute more to the overall weighted average.
+
+### Statistical Significance Testing
+The statistical test is based on a chi-squared independence model, which determines if the observed proportion differs significantly from what would be expected if the row and column variables were independent:
+
+- **Expected values** are calculated using both row and column marginals:
+- **Two-sided testing** is used to identify both higher and lower than expected proportions:
+  - Cells marked with * have significantly **higher** proportions than expected
+  - Cells marked with † have significantly **lower** proportions than expected
+- A cell is marked as statistically significant when:
+  1. The absolute difference between observed and expected proportions exceeds the minimum effect size
+  2. There's sufficient sample size in that row to make a reliable determination
+  3. The p-value falls below the significance threshold after any multiple testing correction
+
+### Interpreting Significant Cells
+- A significant cell means there's a meaningful association between the row and column variables.
+- For example, if a cell for variety "Red Globe" and country "China" is marked with *:
+  - A higher percentage of Red Globe grapes go to China than would be expected based on the overall distribution.
+  - This suggests a special relationship or preference - China may particularly favor Red Globe compared to other varieties.
+- Conversely, a cell marked with † indicates a significantly lower proportion than expected, suggesting potential avoidance or negative association.
+
+### Understanding the 'Other' Category
+- When there are many categories (more than 19), less frequent items are grouped into an 'Other' category.
+- An 'Other' category is marked as statistically significant if **any** of its component categories show significance.
+- The direction (* or †) is based on the first significant component found in the group.
+- Significance in 'Other' does not mean the entire group is significant, only that at least one component shows a significant pattern.
+- When 'Other' shows significance, it suggests further investigation into the specific components may reveal interesting patterns.
+"""
+    return interpretation 

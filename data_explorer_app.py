@@ -131,7 +131,7 @@ def main():
         # Display visualisation statistics if available
         if visualisation["type"] is not None:
             # Create an expander for statistics
-            with st.expander("Statistics", expanded=True):
+            with st.expander("🧮 Data Overview", expanded=True):
                 # Get and display statistics using the unified format_stats function
                 stats = format_stats(visualisation)
                 if stats:

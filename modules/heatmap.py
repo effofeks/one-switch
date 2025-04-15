@@ -63,29 +63,18 @@ def create_heatmap(
     
     # Make a copy to avoid modifying the original dataframe
     df_copy = df.copy()
-    # initial_rows = len(df_copy)
-    # print(f"DEBUG: Initial row count: {initial_rows}")
-    # print(f"DEBUG: Sample data for {row_col}: {df_copy[row_col].head().tolist()}")
-    # print(f"DEBUG: Sample data for {col_col}: {df_copy[col_col].head().tolist()}")
-    # print(f"DEBUG: Sample data for {value_col}: {df_copy[value_col].head().tolist()}")
 
     # Convert min_effect_size from percentage points to proportion
     min_effect_size_prop = min_effect_size / 100
 
     filtered_df = df_copy.dropna(subset=[row_col, col_col])
-    # print(f"DEBUG: Row count after dropping NA in row/col: {len(filtered_df)}")
     
     filtered_df = filtered_df[filtered_df[row_col] != "None"]
     filtered_df = filtered_df[filtered_df[col_col] != "None"]
-    # print(f"DEBUG: Row count after removing 'None' values: {len(filtered_df)}")
 
     # Convert row and column values to strings for safety
     filtered_df[row_col] = filtered_df[row_col].astype(str)
     filtered_df[col_col] = filtered_df[col_col].astype(str)
-    
-    # Print unique values to help diagnose empty pivot issues
-    # print(f"DEBUG: Unique values in {row_col}: {filtered_df[row_col].nunique()}")
-    # print(f"DEBUG: Unique values in {col_col}: {filtered_df[col_col].nunique()}")
     
     # Relaxed validation for value_col - don't restrict to just three types
     if value_col not in ["container_number", "std_cartons", "income"]:
@@ -95,7 +84,6 @@ def create_heatmap(
 
     if value_col == "income":
         filtered_df = filtered_df.dropna(subset=["income"])
-        # print(f"DEBUG: Row count after dropping NA in income: {len(filtered_df)}")
 
     # Create a pivot table
     try:
@@ -150,17 +138,6 @@ def create_heatmap(
         except Exception as e2:
             print(f"DEBUG: Fallback pivot also failed: {str(e2)}")
             raise ValueError(f"Could not create pivot table: {str(e)}")
-    
-    # print(f"DEBUG: Pivot table shape: {pivot_df.shape if not pivot_df.empty else 'Empty'}")
-    # if not pivot_df.empty:
-    #     print(f"DEBUG: Pivot table index preview: {pivot_df.index[:5].tolist()}")
-    #     print(f"DEBUG: Pivot table columns preview: {pivot_df.columns[:5].tolist()}")
-        
-    # Check if pivot_df is empty
-    # if pivot_df.empty:
-    #     print(f"DEBUG: Empty pivot table. Last filtered dataframe had {len(filtered_df)} rows.")
-    #     print(f"DEBUG: Last filtered dataframe sample: {filtered_df.head(3).to_dict()}")
-
 
     # Sort by row totals
     row_totals = pivot_df.sum(axis=1).sort_values(ascending=False)
@@ -170,102 +147,91 @@ def create_heatmap(
     col_totals = pivot_df.sum(axis=0).sort_values(ascending=False)
     pivot_df = pivot_df[col_totals.index]
 
-    # Calculate weighted averages
+    # Calculate row and column proportions
     entity1_totals = pivot_df.sum(axis=1)
-    entity1_percentages = pivot_df.div(entity1_totals, axis=0)
-
-    weighted_avg_by_entity2 = {}
-    for entity2 in pivot_df.columns:
-        weighted_sum = (entity1_percentages[entity2] * entity1_totals).sum()
-        weighted_avg = weighted_sum / entity1_totals.sum()
-        weighted_avg_by_entity2[entity2] = weighted_avg
-
+    entity2_totals = pivot_df.sum(axis=0)
+    grand_total = pivot_df.values.sum()
+    
+    # Create p-value table - one table for all combinations of row and column
+    pvalue_table = pd.DataFrame(index=pivot_df.index, columns=pivot_df.columns)
+    
+    # Create tables to store observed and expected values, chi-squared stats and directions
+    observed_props = pd.DataFrame(index=pivot_df.index, columns=pivot_df.columns)
+    expected_props = pd.DataFrame(index=pivot_df.index, columns=pivot_df.columns)
+    chi2_contribution = pd.DataFrame(index=pivot_df.index, columns=pivot_df.columns)
+    is_higher = pd.DataFrame(index=pivot_df.index, columns=pivot_df.columns, data=False)
+    
+    # Perform Chi-squared and Z-test statistical significance testing
     # Collect p-values for all tests
     pvalues = []
     test_indices = []
-    
-    # Create p-value table - one table for all combinations of row and column
-    # with p-values and original counts
-    pvalue_table = pd.DataFrame(index=pivot_df.index, columns=pivot_df.columns)
-    count_table = pivot_df.copy()
-
-    # Perform statistical significance testing with improved approach
     min_sample_size = 30  # Minimum sample size for reliable testing
-    
-    # print(f"DEBUG: Check point 1")
 
+    # First, normalize the pivot table by rows to get observed proportions
+    entity1_percentages = pivot_df.div(entity1_totals, axis=0)
+    
+    # Perform statistical testing for each cell
     for row_idx in pivot_df.index:
         for col_idx in pivot_df.columns:
-            # print(f"DEBUG: row_idx {row_idx} and col_idx {col_idx}")
-            # Skip cells with zero counts or small sample sizes
-            count = pivot_df.loc[row_idx, col_idx]
+            # Get counts for this cell
+            observed_count = pivot_df.loc[row_idx, col_idx]
             row_total = entity1_totals[row_idx]
+            col_total = entity2_totals[col_idx]
             
             # Default p-value is 1.0 (not significant)
             p_value = 1.0
             
-            if count == 0 or row_total < min_sample_size:
-                pvalue_table.loc[row_idx, col_idx] = f"{p_value:.4f} ({int(count)})"
+            # Skip cells with zero counts or small sample sizes
+            if observed_count == 0 or row_total < min_sample_size:
+                pvalue_table.loc[row_idx, col_idx] = f"{p_value:.4f} ({int(observed_count)})"
                 continue
-
-            # Calculate observed proportion
-            observed_prop = count / row_total
-            # print(f"DEBUG: observed_prop {observed_prop}")
-            # Get weighted average (expected proportion)
-            expected_prop = weighted_avg_by_entity2[col_idx]
-            # print(f"DEBUG: expected_prop {expected_prop}")
-
-            # Handle NaN or Infinity values
-            if (
-                pd.isna(observed_prop)
-                or pd.isna(expected_prop)
-                or np.isinf(observed_prop)
-                or np.isinf(expected_prop)
-            ):
-                pvalue_table.loc[row_idx, col_idx] = f"{p_value:.4f} ({int(count)})"
-                continue
-
-            # Only test if observed is higher than expected
-            if observed_prop <= expected_prop:
-                pvalue_table.loc[row_idx, col_idx] = f"{p_value:.4f} ({int(count)})"
-                continue
-
-            # Calculate effect size - how substantial is the difference?
-            effect_size = observed_prop - expected_prop
-
-            # Skip very small effect sizes (meaningful difference threshold) or NaN values
+            
+            # Calculate observed proportion within the row
+            observed_prop = observed_count / row_total
+            observed_props.loc[row_idx, col_idx] = observed_prop
+            
+            # Calculate expected proportion based on chi-squared independence model
+            # Expected count = (row_total * col_total) / grand_total
+            expected_count = (row_total * col_total) / grand_total
+            expected_prop = expected_count / row_total
+            expected_props.loc[row_idx, col_idx] = expected_prop
+            
+            # Calculate effect size (difference between observed and expected proportion)
+            effect_size = abs(observed_prop - expected_prop)
+            
+            # Skip very small effect sizes or NaN values
             if pd.isna(effect_size) or effect_size < min_effect_size_prop:
-                pvalue_table.loc[row_idx, col_idx] = f"{p_value:.4f} ({int(count)})"
+                pvalue_table.loc[row_idx, col_idx] = f"{p_value:.4f} ({int(observed_count)})"
                 continue
-
-            # Perform z-test for proportions
-            # Standard error for the difference between two proportions
-            se = np.sqrt(
-                expected_prop
-                * (1 - expected_prop)
-                * (1 / row_total + 1 / entity1_totals.sum())
-            )
-
-            # Z-score
+                
+            # Determine if observed is higher or lower than expected
+            higher_than_expected = observed_prop > expected_prop
+            is_higher.loc[row_idx, col_idx] = higher_than_expected
+            
+            # Calculate chi-squared contribution for this cell
+            contribution = ((observed_count - expected_count) ** 2) / expected_count
+            chi2_contribution.loc[row_idx, col_idx] = contribution
+            
+            # Calculate standard error for Z-test
+            se = np.sqrt(expected_prop * (1 - expected_prop) / row_total)
+            
+            # Z-score (two-sided)
             z_score = (observed_prop - expected_prop) / se
-
-            # P-value (one-tailed test)
-            p_value = 1 - stats.norm.cdf(z_score)
+            
+            # Two-sided p-value 
+            p_value = 2 * (1 - stats.norm.cdf(abs(z_score)))
             
             # Store the p-value in the table with the count
-            pvalue_table.loc[row_idx, col_idx] = f"{p_value:.4f} ({int(count)})"
-
+            pvalue_table.loc[row_idx, col_idx] = f"{p_value:.4f} ({int(observed_count)})"
+            
             # Store p-value and indices for later correction
             pvalues.append(p_value)
             test_indices.append((row_idx, col_idx))
-
+            
     # Create a DataFrame to store significance results
     significance_df = pd.DataFrame(
         index=pivot_df.index, columns=pivot_df.columns, data=False
     )
-
-    # print(f"DEBUG: Check point 2")
-    # print(significance_df)
 
     # Apply multiple testing correction if requested and if we have any tests
     if pvalues and correct_multiple_tests:
@@ -292,6 +258,7 @@ def create_heatmap(
     max_categories = 19
     working_pivot = pivot_df.copy()
     working_significance_df = significance_df.copy()
+    working_is_higher_df = is_higher.copy()
 
     # First, handle columns (entity2)
     if len(working_pivot.columns) > max_categories:
@@ -309,14 +276,13 @@ def create_heatmap(
         if other_columns:
             new_pivot["Other"] = working_pivot[other_columns].sum(axis=1)
 
-            # Calculate weighted average for "Other" category
-            other_weighted_avg = sum(
-                weighted_avg_by_entity2[col] for col in other_columns
-            )
-            weighted_avg_by_entity2["Other"] = other_weighted_avg
-
         # Create updated significance DataFrame for columns
         new_significance_df = pd.DataFrame(
+            False, index=working_pivot.index, columns=new_pivot.columns
+        )
+        
+        # Create updated is_higher DataFrame for columns
+        new_is_higher_df = pd.DataFrame(
             False, index=working_pivot.index, columns=new_pivot.columns
         )
 
@@ -330,6 +296,9 @@ def create_heatmap(
                     new_significance_df.loc[row_idx, col_idx] = (
                         working_significance_df.loc[row_idx, col_idx]
                     )
+                    new_is_higher_df.loc[row_idx, col_idx] = (
+                        working_is_higher_df.loc[row_idx, col_idx]
+                    )
 
         # "Other" column is marked as significant if any of its components were significant
         if "Other" in new_pivot.columns and other_columns:
@@ -342,10 +311,13 @@ def create_heatmap(
                             and working_significance_df.loc[row_idx, col]
                         ):
                             new_significance_df.loc[row_idx, "Other"] = True
+                            # Use the direction of the first significant component
+                            new_is_higher_df.loc[row_idx, "Other"] = working_is_higher_df.loc[row_idx, col]
                             break
 
         working_pivot = new_pivot
         working_significance_df = new_significance_df
+        working_is_higher_df = new_is_higher_df
 
     # Now handle rows (entity1) independently
     if len(working_pivot.index) > max_categories:
@@ -369,6 +341,11 @@ def create_heatmap(
         new_row_significance_df = pd.DataFrame(
             False, index=row_reduced_pivot.index, columns=working_pivot.columns
         )
+        
+        # Create updated is_higher DataFrame for rows
+        new_row_is_higher_df = pd.DataFrame(
+            False, index=row_reduced_pivot.index, columns=working_pivot.columns
+        )
 
         # Copy significance information for top rows
         for row_idx in top_rows:
@@ -379,6 +356,9 @@ def create_heatmap(
                 ):
                     new_row_significance_df.loc[row_idx, col_idx] = (
                         working_significance_df.loc[row_idx, col_idx]
+                    )
+                    new_row_is_higher_df.loc[row_idx, col_idx] = (
+                        working_is_higher_df.loc[row_idx, col_idx]
                     )
 
         # "Other" row is marked as significant if any of its components were significant
@@ -392,14 +372,18 @@ def create_heatmap(
                             and working_significance_df.loc[row, col_idx]
                         ):
                             new_row_significance_df.loc["Other", col_idx] = True
+                            # Use the direction of the first significant component
+                            new_row_is_higher_df.loc["Other", col_idx] = working_is_higher_df.loc[row, col_idx]
                             break
 
         working_pivot = row_reduced_pivot
         working_significance_df = new_row_significance_df
+        working_is_higher_df = new_row_is_higher_df
 
     # Update our working DataFrames for visualisation
     pivot_df_top = working_pivot
     significance_df_top = working_significance_df
+    is_higher_df_top = working_is_higher_df
 
     # Recalculate entity1_totals for the new pivot
     new_entity1_totals = pivot_df_top.sum(axis=1)
@@ -435,7 +419,14 @@ def create_heatmap(
     ax = plt.subplot(gs[0])
 
     # Create the heatmap base
-    heatmap = sns.heatmap(viz_df, cmap="YlGnBu", annot=False, linewidths=0.5, ax=ax)
+    heatmap = sns.heatmap(
+        viz_df, 
+        cmap="YlGnBu", 
+        annot=False, 
+        linewidths=0.5, 
+        ax=ax,
+        cbar_kws={'pad': 0.1}  # Increased padding to move colorbar further right
+    )
 
     # Get the colormap normalized data for determining text color
     norm = plt.Normalize(viz_df.min().min(), viz_df.max().max())
@@ -446,6 +437,7 @@ def create_heatmap(
         for j, col_idx in enumerate(viz_df.columns):
             val = viz_df.loc[row_idx, col_idx]
             is_significant = significance_df_top.loc[row_idx, col_idx]
+            is_higher = is_higher_df_top.loc[row_idx, col_idx]
 
             # Get the actual color of the cell
             color_val = norm(val)
@@ -458,12 +450,14 @@ def create_heatmap(
             # Choose text color based on background brightness
             # Threshold of 0.5 for a good contrast
             text_color = "white" if luminance < 0.5 else "black"
-            # Only mark significant cells with *
+            
+            # Mark significant cells with * (higher) or † (lower)
             if is_significant:
+                marker = "*" if is_higher else "†"
                 text = ax.text(
                     j + 0.5,
                     i + 0.5,
-                    f"{val:.2f}*",
+                    f"{val:.2f}{marker}",
                     ha="center",
                     va="center",
                     fontweight="bold",
@@ -481,7 +475,7 @@ def create_heatmap(
 
     # Add row totals to the right of the heatmap
     # Calculate position for row totals (just past the end of the heatmap)
-    right_pos = len(viz_df.columns)
+    right_pos = len(viz_df.columns) + 0.5  # Increased from len(viz_df.columns)
 
     # Add a title for the totals column
     if value_col == "container_number":
@@ -516,16 +510,6 @@ def create_heatmap(
             color="black",
         )
 
-    # Create a formatted string of weighted averages for visible columns
-    weighted_avg_info = "Weighted averages by column:\n"
-    for col in viz_df.columns:
-        avg_val = weighted_avg_by_entity2[col]
-        weighted_avg_info += f"{col}: {avg_val:.3f}  "
-
-        # Add line breaks to avoid too long lines
-        if (list(viz_df.columns).index(col) + 1) % 3 == 0:
-            weighted_avg_info += "\n"
-
     # Add note about the statistical testing in the footnote
     test_method = (
         "with FDR correction for multiple testing"
@@ -535,9 +519,10 @@ def create_heatmap(
 
     footnote_text = (
         f"* Statistically significant higher proportion at α={significance_level} {test_method}\n"
-        f"  (Requires >{min_effect_size}% difference and minimum sample size of {min_sample_size})\n\n"
+        f"† Statistically significant lower proportion at α={significance_level} {test_method}\n"
+        f"  (Requires >{min_effect_size}% difference and minimum sample size of {min_sample_size})\n"
+        f"  Expected values based on chi-squared independence model (row and column marginals)\n\n"
     )
-    footnote_text += weighted_avg_info
 
     # Create a separate axis for the footnote
     footnote_ax = plt.subplot(gs[1])
@@ -851,7 +836,14 @@ def create_heatmap_packing_week(
     ax = plt.subplot(gs[0])
 
     # Create the heatmap base
-    heatmap = sns.heatmap(viz_df, cmap="YlGnBu", annot=False, linewidths=0.5, ax=ax)
+    heatmap = sns.heatmap(
+        viz_df, 
+        cmap="YlGnBu", 
+        annot=False, 
+        linewidths=0.5, 
+        ax=ax,
+        cbar_kws={'pad': 0.1}  # Increased padding to move colorbar further right
+    )
 
     # Get the colormap normalized data for determining text color
     norm = plt.Normalize(viz_df.min().min(), viz_df.max().max())
@@ -931,7 +923,7 @@ def create_heatmap_packing_week(
                 )
 
     # Add row totals to the right of the heatmap
-    right_pos = len(viz_df.columns)
+    right_pos = len(viz_df.columns) + 0.5  # Increased from len(viz_df.columns)
 
     # Add a title for the totals column
     if value_col == "container_number":
