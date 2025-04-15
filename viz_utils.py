@@ -23,28 +23,29 @@ def anim_to_html(anim):
     try:
         import tempfile
         import os
-        
+
         # Create a temporary file with a .gif extension
-        with tempfile.NamedTemporaryFile(suffix='.gif', delete=False) as temp_file:
+        with tempfile.NamedTemporaryFile(suffix=".gif", delete=False) as temp_file:
             temp_path = temp_file.name
-        
+
         # Save the animation to the temporary file
-        anim.save(temp_path, writer='pillow', fps=1)
-        
+        anim.save(temp_path, writer="pillow", fps=1)
+
         # Read the file into memory
-        with open(temp_path, 'rb') as f:
+        with open(temp_path, "rb") as f:
             data = f.read()
-        
+
         # Clean up the temporary file
         os.unlink(temp_path)
-        
+
         # Convert to base64
-        encoded = base64.b64encode(data).decode('utf-8')
-        
+        encoded = base64.b64encode(data).decode("utf-8")
+
         # Create HTML
         return f'<img src="data:image/gif;base64,{encoded}" alt="Network Animation">'
     except Exception as e:
         import traceback
+
         print(f"Error converting animation to HTML: {str(e)}")
         print(traceback.format_exc())
         return None
@@ -55,7 +56,7 @@ def get_strong_connection_focal_info(df, rank=1, measure="containers"):
     # Check if df is None
     if df is None:
         return None
-        
+
     # Prepare the weighted edges dataframe - must exactly match the logic in visualise_strong_connections
     if measure == "containers":
         weighted_edges_df = (
@@ -138,7 +139,14 @@ def create_weighted_graph(df, measure="containers"):
 
 def format_network_stats(G, viz_type, params=None, focal_info=None, full_graph=None):
     """Format network statistics into a structured display for Streamlit"""
-    if G is None and viz_type not in ["Heatmap", "Packing Week Heatmap", "Concentration Bubble Plot", "heatmap", "packing_week_heatmap", "concentration_bubble"]:
+    if G is None and viz_type not in [
+        "Heatmap",
+        "Packing Week Heatmap",
+        "Concentration Bubble Plot",
+        "heatmap",
+        "packing_week_heatmap",
+        "concentration_bubble",
+    ]:
         return None
 
     stats = {}
@@ -147,9 +155,9 @@ def format_network_stats(G, viz_type, params=None, focal_info=None, full_graph=N
     viz_type_map = {
         "relationship": "Strong Connections",
         "company_network": "Company Network",
-        "network_timelapse": "Network Timelapse"
+        "network_timelapse": "Network Timelapse",
     }
-    
+
     # Convert new viz_type to old format if needed
     display_viz_type = viz_type_map.get(viz_type, viz_type)
 
@@ -188,12 +196,10 @@ def format_network_stats(G, viz_type, params=None, focal_info=None, full_graph=N
 
                 # Calculate total weight for each node
                 node1_total_weight = sum(
-                    G[node1][neighbor].get("weight", 0)
-                    for neighbor in node1_neighbors
+                    G[node1][neighbor].get("weight", 0) for neighbor in node1_neighbors
                 )
                 node2_total_weight = sum(
-                    G[node2][neighbor].get("weight", 0)
-                    for neighbor in node2_neighbors
+                    G[node2][neighbor].get("weight", 0) for neighbor in node2_neighbors
                 )
 
                 # Format weights for display
@@ -397,15 +403,15 @@ def format_heatmap_stats(data, params=None, metadata=None):
     """Format heatmap statistics into a structured display for Streamlit"""
     if data is None or not params:
         return None
-    
+
     try:
         stats = {}
-        
+
         # Get parameters safely, ensuring defaults if values are missing
         row_col = params.get("row_col", "")
-        col_col = params.get("col_col", "") 
+        col_col = params.get("col_col", "")
         value_col = params.get("value_col", "")
-        
+
         # Include parameters used as a dictionary
         param_dict = {}
         if row_col:
@@ -414,60 +420,103 @@ def format_heatmap_stats(data, params=None, metadata=None):
             param_dict["Column Variable"] = str(col_col)
         if value_col:
             param_dict["Measure"] = str(value_col)
-            
+
         param_dict["Significance Level"] = str(params.get("significance_level", 0.05))
-        param_dict["Correct Multiple Tests"] = str(params.get("correct_multiple_tests", True))
+        param_dict["Correct Multiple Tests"] = str(
+            params.get("correct_multiple_tests", True)
+        )
         param_dict["Minimum Effect Size"] = str(params.get("min_effect_size", 5.0))
-            
+
         stats["Parameters"] = param_dict
-        
-        # Add p-value table if available in metadata
+
+        df = data
+        df_copy = df.copy()
+
+        # Data overview (dictionary format)
+        stats["Sample Size"] = {"Total Rows": str(len(df))}
+
+        # Check each column for existence before using it
+        columns_exist = True
+        for col in [col for col in [row_col, col_col, value_col] if col]:
+            if col not in df_copy.columns:
+                columns_exist = False
+                stats["Data Error"] = f"Column '{col}' not found in data"
+
+        if not columns_exist:
+            return stats
+
+        # Replace 'None' string values with NaN if columns exist
+        columns_to_check = [
+            col
+            for col in [row_col, col_col, value_col]
+            if col and col in df_copy.columns
+        ]
+        for col in columns_to_check:
+            df_copy.loc[df_copy[col] == "None", col] = np.nan
+
+        # Get columns that actually exist in the dataframe for filtering
+        filter_cols = [
+            col for col in [row_col, col_col] if col and col in df_copy.columns
+        ]
+        if len(filter_cols) >= 1:
+            filtered_df = df_copy.dropna(subset=filter_cols)
+            stats["Sample Size"]["Rows Used in Heatmap"] = str(len(filtered_df))
+        else:
+            filtered_df = df_copy
+            stats["Sample Size"]["Rows Used in Heatmap"] = "N/A (no filter columns)"
+
+            # Add p-value table if available in metadata
         if metadata and "pvalue_table" in metadata and "pivot_data" in metadata:
             pvalue_df = metadata["pvalue_table"]
             pivot_df = metadata["pivot_data"]
-            
+
             try:
                 # Format the p-value table
-                # The pvalue_df contains strings in format "0.xxxx (n)" 
+                # The pvalue_df contains strings in format "0.xxxx (n)"
                 # We need to extract the p-value and count, reformat them, and recombine
                 formatted_df = pvalue_df.copy()
-                
+
                 # Process each cell to reformat
                 for i in range(len(formatted_df.index)):
                     for j in range(len(formatted_df.columns)):
                         cell_value = formatted_df.iloc[i, j]
-                        
+
                         if cell_value and isinstance(cell_value, str):
                             # Extract p-value and count using regex
                             import re
+
                             match = re.match(r"([\d\.]+) \((\d+)\)", cell_value)
                             if match:
                                 p_value = float(match.group(1))
                                 count = int(match.group(2))
-                                
+
                                 # Format p-value as percentage with 1 decimal place
                                 p_value_fmt = f"{p_value * 100:.1f}%"
-                                
+
                                 # Format count with thousand separators (space)
                                 count_fmt = f"{count:,}".replace(",", " ")
-                                
+
                                 # Combine into new format
                                 formatted_df.iloc[i, j] = f"{p_value_fmt} ({count_fmt})"
-                
+
                 # Sort the table by totals (similar to how the heatmap is sorted)
                 # Calculate totals for rows and columns
                 try:
                     # Calculate row and column totals from the pivot data
                     row_totals = pivot_df.sum(axis=1).sort_values(ascending=False)
                     col_totals = pivot_df.sum(axis=0).sort_values(ascending=False)
-                    
+
                     # Filter to only include rows and columns in the formatted_df
-                    common_rows = [idx for idx in row_totals.index if idx in formatted_df.index]
-                    common_cols = [col for col in col_totals.index if col in formatted_df.columns]
-                    
+                    common_rows = [
+                        idx for idx in row_totals.index if idx in formatted_df.index
+                    ]
+                    common_cols = [
+                        col for col in col_totals.index if col in formatted_df.columns
+                    ]
+
                     # Reorder the formatted DataFrame according to the totals, descending
                     formatted_df = formatted_df.loc[common_rows, common_cols]
-                    
+
                     # Add the sorted formatted table to stats
                     stats["P-Value Table"] = formatted_df
                 except Exception as e:
@@ -481,92 +530,76 @@ def format_heatmap_stats(data, params=None, metadata=None):
         elif metadata and "pvalue_table" in metadata:
             # If we have p-values but no pivot data, still show the table
             stats["P-Value Table"] = metadata["pvalue_table"]
-            
+
         # Add data information analysis - ensure all fields exist
         if not isinstance(data, pd.DataFrame):
             stats["Data Error"] = "Invalid data format"
             return stats
-            
-        df = data
-        df_copy = df.copy()
-        
-        # Data overview (dictionary format)
-        stats["Data Overview"] = {
-            "Total Rows": str(len(df))
-        }
-        
-        # Check each column for existence before using it
-        columns_exist = True
-        for col in [col for col in [row_col, col_col, value_col] if col]:
-            if col not in df_copy.columns:
-                columns_exist = False
-                stats["Data Error"] = f"Column '{col}' not found in data"
-        
-        if not columns_exist:
-            return stats
-        
-        # Replace 'None' string values with NaN if columns exist
-        columns_to_check = [col for col in [row_col, col_col, value_col] if col and col in df_copy.columns]
-        for col in columns_to_check:
-            df_copy.loc[df_copy[col] == 'None', col] = np.nan
-        
-        # Get columns that actually exist in the dataframe for filtering
-        filter_cols = [col for col in [row_col, col_col] if col and col in df_copy.columns]
-        if len(filter_cols) >= 1:
-            filtered_df = df_copy.dropna(subset=filter_cols)
-            stats["Data Overview"]["Rows Used in Heatmap"] = str(len(filtered_df))
-        else:
-            filtered_df = df_copy
-            stats["Data Overview"]["Rows Used in Heatmap"] = "N/A (no filter columns)"
-        
+
         # Critical fields information (as a dataframe)
-        columns_to_analyze = [col for col in [row_col, col_col] if col and col in filtered_df.columns]
-        
+        columns_to_analyze = [
+            col for col in [row_col, col_col] if col and col in filtered_df.columns
+        ]
+
         if columns_to_analyze:
             try:
                 # Create a proper dataframe for Critical Fields
                 col_data = {
-                    'Column': columns_to_analyze,
-                    'Non-null Values': [filtered_df[col].count() for col in columns_to_analyze],
-                    'Non-Null Unique Values': [filtered_df[col].nunique() for col in columns_to_analyze],
-                    'Dtype': [filtered_df[col].dtype for col in columns_to_analyze],
+                    "Column": columns_to_analyze,
+                    "Non-null Values": [
+                        filtered_df[col].count() for col in columns_to_analyze
+                    ],
+                    "Non-Null Unique Values": [
+                        filtered_df[col].nunique() for col in columns_to_analyze
+                    ],
+                    "Dtype": [filtered_df[col].dtype for col in columns_to_analyze],
                 }
-                
+
                 # Only add sample values if there are values to sample
                 sample_values = []
                 for col in columns_to_analyze:
-                    values = filtered_df[col].head(3).tolist() if not filtered_df[col].empty else []
+                    values = (
+                        filtered_df[col].head(3).tolist()
+                        if not filtered_df[col].empty
+                        else []
+                    )
                     sample_values.append(str(values))
-                
-                col_data['Sample Values'] = sample_values
-                
+
+                col_data["Sample Values"] = sample_values
+
                 col_stats = pd.DataFrame(col_data)
                 col_stats = col_stats.astype(str)
                 stats["Critical Fields"] = col_stats
-                
+
                 # Create a proper dataframe for Missing Values Analysis
-                missing_columns = [col for col in [row_col, col_col, value_col] if col and col in df_copy.columns]
+                missing_columns = [
+                    col
+                    for col in [row_col, col_col, value_col]
+                    if col and col in df_copy.columns
+                ]
                 if missing_columns:
                     na_data = {
-                        'Column': missing_columns,
-                        'Missing Values': [df_copy[col].isna().sum() for col in missing_columns],
-                        'Missing Percent': [df_copy[col].isna().mean() * 100 for col in missing_columns]
+                        "Column": missing_columns,
+                        "Missing Values": [
+                            df_copy[col].isna().sum() for col in missing_columns
+                        ],
+                        "Missing Percent": [
+                            df_copy[col].isna().mean() * 100 for col in missing_columns
+                        ],
                     }
-                    
+
                     na_counts = pd.DataFrame(na_data)
-                    na_counts['Missing Percent'] = na_counts['Missing Percent'].round(2)
+                    na_counts["Missing Percent"] = na_counts["Missing Percent"].round(2)
                     na_counts = na_counts.astype(str)
                     stats["Missing Values Analysis"] = na_counts
             except Exception as e:
                 stats["Data Analysis Error"] = str(e)
-        
+
         return stats
     except Exception as e:
         import traceback
-        return {
-            "Error": str(e),
-            "Traceback": traceback.format_exc()
-        }
+
+        return {"Error": str(e), "Traceback": traceback.format_exc()}
 
 
 def display_visualisation_stats(stats):
@@ -580,17 +613,21 @@ def display_visualisation_stats(stats):
     # Display top-level items
     for section, content in stats.items():
         st.subheader(section)
-        
+
         if isinstance(content, pd.DataFrame):
             # For P-Value Table, show the index (row names)
             if section == "P-Value Table":
-                st.text("The P-Value Table shows two-sided statistical testing based on a chi-squared independence model.")
-                st.markdown("""
+                st.text(
+                    "The P-Value Table shows two-sided statistical testing based on a chi-squared independence model."
+                )
+                st.markdown(
+                    """
 - The P-Value Table shows the statistical likelihood (as percentages) that the observed proportion difference could happen by chance.
 - Lower p-values suggest stronger evidence of a real association.
 - The number in parentheses shows the actual count of items in that cell.
 - Ordered by row and column totals to match the heatmap, making it easier to cross-reference.
-                            """)
+                            """
+                )
                 st.dataframe(content)
             else:
                 # For other DataFrames, hide the index
@@ -611,12 +648,12 @@ def display_visualisation_stats(stats):
 def format_stats(visualisation):
     """
     Format statistics for any visualisation type using the unified visualisation structure.
-    
+
     Parameters:
     -----------
     visualisation : dict
         The unified visualisation structure from st.session_state.visualisation
-        
+
     Returns:
     --------
     dict or None
@@ -624,33 +661,38 @@ def format_stats(visualisation):
     """
     if not visualisation or not visualisation["type"]:
         return None
-        
+
     viz_type = visualisation["type"]
     params = visualisation["params"]
     # result_df = visualisation["result_df"]
     graph = visualisation["graph"]
     metadata = visualisation["metadata"]
-    
+
     # Route to the appropriate formatter based on visualisation type
-    if viz_type in ["relationship", "strong_connections", "company_network", "network_timelapse"]:
+    if viz_type in [
+        "relationship",
+        "strong_connections",
+        "company_network",
+        "network_timelapse",
+    ]:
         focal_info = metadata.get("focal_info")
         full_graph = metadata.get("full_graph")
         return format_network_stats(graph, viz_type, params, focal_info, full_graph)
-    
+
     elif viz_type in ["heatmap", "packing_week_heatmap", "standard_heatmap"]:
         # Ensure we have value_col in params for heatmap data analysis
         value_col = params.get("value_col", params.get("measure", "containers"))
         if "value_col" not in params and value_col:
             params["value_col"] = value_col
         return format_heatmap_stats(visualisation["data"], params, metadata)
-    
+
     return None
 
 
 def export_plot_as_png(fig, filename="plot.png", dpi=300):
     """
     Converts a matplotlib figure to a PNG image and creates a download button.
-    
+
     Parameters:
     -----------
     fig : matplotlib.figure.Figure
@@ -659,7 +701,7 @@ def export_plot_as_png(fig, filename="plot.png", dpi=300):
         The name of the file to be downloaded (default: "plot.png")
     dpi : int, optional
         The resolution of the exported image (default: 300)
-        
+
     Returns:
     --------
     None
@@ -667,70 +709,71 @@ def export_plot_as_png(fig, filename="plot.png", dpi=300):
     if fig is None:
         st.warning("No plot available to export.")
         return
-    
+
     import io
-    
+
     # Create a BytesIO buffer to save the figure
     buf = io.BytesIO()
-    
+
     # Save the figure to the buffer with specified DPI
     fig.savefig(buf, format="png", dpi=dpi, bbox_inches="tight")
-    
+
     # Set the buffer position to the beginning
     buf.seek(0)
-    
+
     # Create a download button
     st.download_button(
         label="📥 Export as PNG",
         data=buf,
         file_name=filename,
         mime="image/png",
-        key="download_plot"
+        key="download_plot",
     )
 
 
 def get_heatmap_interpretation():
     """
     Returns a detailed explanation of how to interpret heatmap visualisations.
-    
+
     Returns:
     --------
     str
         Markdown formatted text explaining heatmap interpretation
     """
     interpretation = """
-### Basic Structure
-- Each cell in the heatmap represents the proportion of the selected measure (e.g., standard cartons) for a specific row-column combination.
-- Colors intensity indicates the proportion value - darker cells have higher proportions.
-- Each row sums to 1 (or 100%), meaning the values show the distribution across columns for each row.
-- For example, if a cell shows 0.25 (or 25%), it means that 25% of the total value for that row went to that column.
-- This allows you to compare distribution patterns across different rows even when their total volumes differ significantly.
-- Rows with larger total values (shown in the rightmost column) contribute more to the overall weighted average.
+#### Heatmap Structure
+- Each cell shows the proportion of a selected measure (e.g., standard cartons) for a row-column combination.
+- Each row sums to 100%, showing how that row's total is distributed across columns.
+- This normalization enables fair comparisons across rows with different total volumes.
+- Total row volumes (shown at the right) inform each row’s weight in the overall dataset.
 
-### Statistical Significance Testing
-The statistical test is based on a chi-squared independence model, which determines if the observed proportion differs significantly from what would be expected if the row and column variables were independent:
+---
 
-- **Expected values** are calculated using both row and column marginals:
-- **Two-sided testing** is used to identify both higher and lower than expected proportions:
-  - Cells marked with * have significantly **higher** proportions than expected
-  - Cells marked with † have significantly **lower** proportions than expected
-- A cell is marked as statistically significant when:
-  1. The absolute difference between observed and expected proportions exceeds the minimum effect size
-  2. There's sufficient sample size in that row to make a reliable determination
-  3. The p-value falls below the significance threshold after any multiple testing correction
+#### Statistical Significance
+- The test uses a **chi-squared independence model** to compare observed vs expected proportions (based on row and column marginals).
+- **Two-sided testing** detects both over- and under-representation.
+- Significance is indicated as:
+  - `*` — proportion is significantly **higher** than expected  
+  - `†` — proportion is significantly **lower** than expected
+- A cell is marked significant when:
+  - The absolute difference exceeds a minimum effect size
+  - The row has sufficient sample size
+  - The p-value is below the significance threshold (with optional correction for multiple testing)
 
-### Interpreting Significant Cells
-- A significant cell means there's a meaningful association between the row and column variables.
-- For example, if a cell for variety "Red Globe" and country "China" is marked with *:
-  - A higher percentage of Red Globe grapes go to China than would be expected based on the overall distribution.
-  - This suggests a special relationship or preference - China may particularly favor Red Globe compared to other varieties.
-- Conversely, a cell marked with † indicates a significantly lower proportion than expected, suggesting potential avoidance or negative association.
+---
 
-### Understanding the 'Other' Category
-- When there are many categories (more than 19), less frequent items are grouped into an 'Other' category.
-- An 'Other' category is marked as statistically significant if **any** of its component categories show significance.
-- The direction (* or †) is based on the first significant component found in the group.
-- Significance in 'Other' does not mean the entire group is significant, only that at least one component shows a significant pattern.
-- When 'Other' shows significance, it suggests further investigation into the specific components may reveal interesting patterns.
+#### How to Interpret Significance
+- A significant cell indicates a **non-random association** between row and column.
+- Example: If the **Red Globe × China** cell is marked `*`, China receives a disproportionately high share of Red Globe grapes.
+- Conversely, `†` suggests China receives **less** than expected, hinting at avoidance or negative association.
+
+---
+
+#### The 'Other' Category
+- When rows or columns exceed 19, lower-frequency items are grouped into **"Other."**
+- "Other" is marked significant (`*` or `†`) if **any of its components** are significant.
+- The symbol reflects the direction of the **first significant component**.
+- Significance in "Other" flags a pattern worth exploring further within the grouped items.
+
 """
-    return interpretation 
+    return interpretation
