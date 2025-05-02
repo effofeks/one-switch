@@ -76,22 +76,11 @@ def main():
         
         # Create the appropriate aggregated dataframe based on the visualisation type
         with st.spinner("Preparing data for visualisation..."):
-            if viz_type in ["Buyer-Seller Relationship", "Individual Company Network", "Network Timelapse"]:
-                viz_df = create_viz_df(st.session_state.df, "network")
-            else:
-                viz_df = create_viz_df(st.session_state.df, "heatmap")
-                
-            st.session_state.visualisation["data"] = viz_df
-
+            # Get the unique company IDs from the main dataframe
+            buyer_ids = st.session_state.df["buyer_id"].dropna().unique().tolist()
+            seller_ids = st.session_state.df["seller_id"].dropna().unique().tolist()
+            st.session_state.company_ids = sorted(list(set(buyer_ids + seller_ids)))
             
-            # Always update agg_df in session state to ensure it's refreshed for the current visualisation
-            # update_visualisation(viz_type, viz_df)
-            if viz_df is not None:
-                # Update company IDs based on the new agg_df
-                buyer_ids = viz_df["buyer_id"].dropna().unique().tolist()
-                seller_ids = viz_df["seller_id"].dropna().unique().tolist()
-                st.session_state.company_ids = sorted(list(set(buyer_ids + seller_ids)))
-                
         
         # Handle different visualisation types
         if viz_type == "Buyer-Seller Relationship":

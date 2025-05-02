@@ -657,24 +657,18 @@ def format_stats(visualisation):
     Returns:
     --------
     dict or None
-        Formatted statistics or None if not available
+        A dictionary of formatted statistics or None if not available
     """
     if not visualisation or not visualisation["type"]:
         return None
 
     viz_type = visualisation["type"]
     params = visualisation["params"]
-    # result_df = visualisation["result_df"]
     graph = visualisation["graph"]
     metadata = visualisation["metadata"]
 
-    # Route to the appropriate formatter based on visualisation type
-    if viz_type in [
-        "relationship",
-        "strong_connections",
-        "company_network",
-        "network_timelapse",
-    ]:
+    # Network visualisations
+    if viz_type in ["strong_connections", "company_network", "network_timelapse"]:
         focal_info = metadata.get("focal_info")
         full_graph = metadata.get("full_graph")
         return format_network_stats(graph, viz_type, params, focal_info, full_graph)
@@ -684,7 +678,7 @@ def format_stats(visualisation):
         value_col = params.get("value_col", params.get("measure", "containers"))
         if "value_col" not in params and value_col:
             params["value_col"] = value_col
-        return format_heatmap_stats(visualisation["data"], params, metadata)
+        return format_heatmap_stats(st.session_state.df, params, metadata)
 
     return None
 
@@ -745,7 +739,7 @@ def get_heatmap_interpretation():
 - Each cell shows the proportion of a selected measure (e.g., standard cartons) for a row-column combination.
 - Each row sums to 100%, showing how that row's total is distributed across columns.
 - This normalization enables fair comparisons across rows with different total volumes.
-- Total row volumes (shown at the right) inform each row’s weight in the overall dataset.
+- Total row volumes (shown at the right) inform each row's weight in the overall dataset.
 
 ---
 

@@ -31,8 +31,8 @@ def load_data_from_database(season, commodity_group):
             "map_season_year = 2024", f"map_season_year = {season}"
         )
         cg_query = cg_query.replace(
-            "commodities.commodity_group = 'Citrus'",
-            f"commodities.commodity_group = '{commodity_group}'",
+            "mv_pallet_timeline.commodity_group = 'Citrus'",
+            f"mv_pallet_timeline.commodity_group = '{commodity_group}'",
         )
 
         fin_query = utils.fin_query.replace(
@@ -54,23 +54,28 @@ def load_data_from_database(season, commodity_group):
         )
 
         # Process finance data
-        fin_df["cgt_amount_zar"] = fin_df["cgt_amount"] * fin_df["exchange_rate"]
         revenue_df = fin_df[
             (fin_df["payment_status"] != "voided")
             & (fin_df["document_type"] != "commercial_invoice")
+            & (fin_df["cost_type"] == "income")
         ]
 
         # Aggregate income by cg_id
-        income_df = (
-            revenue_df[revenue_df["cost_type"] == "income"]
-            .groupby("cg_id")["cgt_amount_zar"]
-            .sum()
+        n_ili_df = (
+            revenue_df
+            .groupby("cg_id")["invoice_line_item_id"]
+            .nunique()
             .reset_index()
         )
+        n_ili_df.rename(columns={"invoice_line_item_id": "n_ili"}, inplace=True)
+        
+        income_df = revenue_df.merge(n_ili_df, left_on="cg_id", right_on="cg_id", how="left")
+        income_df["cgt_amount"] = income_df["cgt_amount"] / income_df["n_ili"]
+        income_df["cgt_amount_zar"] = income_df["cgt_amount"] * income_df["exchange_rate"]
         income_df.rename(columns={"cgt_amount_zar": "income"}, inplace=True)
-
         # Merge income into main dataframe
         cg_df = cg_df.merge(income_df, left_on="id", right_on="cg_id", how="left")
+
 
         # Explicitly convert income to float
         cg_df["income"] = pd.to_numeric(cg_df["income"], errors="coerce")

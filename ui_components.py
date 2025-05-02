@@ -310,11 +310,11 @@ What the cell value means:
 - Each row (variety) sums to 100%, showing how that variety is distributed across countries.
 
 What the statistical test examines:
-- The Chi-squared test for independence asks: _Is the distribution of Star Ruby across countries different from what we’d expect if variety and country were unrelated?_
+- The Chi-squared test for independence asks: _Is the distribution of Star Ruby across countries different from what we'd expect if variety and country were unrelated?_
 - The asterisk (*) means the observed value (12%) is significantly higher than expected under this assumption of independence.
 
 In practical terms:
-- The cell values show how a variety’s volume is split across target countries.
+- The cell values show how a variety's volume is split across target countries.
 - Significance markers (* or †) flag when this pattern is unusual — either stronger or weaker than what the overall data trends would predict.
 - A significant result suggests the variety-country pair has a distinctive relationship, not explained by general popularity alone.
 - The chosen significance level of 5% means that cells are flagged as significant if the observed value is less than 5% likely to occur by chance.
@@ -326,11 +326,27 @@ In practical terms:
         # Create a container for the export button and align it to the right
         _, right_col = st.columns([4, 1])
         with right_col:
-            # Add the export button
-            export_plot_as_png(current_plot, filename=filename)
+            # Add the export button - ensure we have a valid matplotlib figure
+            if isinstance(current_plot, tuple):
+                # If current_plot is a tuple, use the first element if it's a figure
+                if len(current_plot) > 0 and hasattr(current_plot[0], 'savefig'):
+                    export_plot_as_png(current_plot[0], filename=filename)
+                else:
+                    st.warning("Plot is not in the expected format for export.")
+            else:
+                # Use current_plot directly if it's not a tuple
+                export_plot_as_png(current_plot, filename=filename)
             
         # Show the plot in a separate row
-        st.pyplot(current_plot)
+        if isinstance(current_plot, tuple):
+            # If current_plot is a tuple, use the first element
+            if len(current_plot) > 0:
+                st.pyplot(current_plot[0])
+            else:
+                st.error("No valid plot to display.")
+        else:
+            # Use current_plot directly if it's not a tuple
+            st.pyplot(current_plot)
 
 
 def render_heatmap_params():

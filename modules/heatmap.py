@@ -1,4 +1,5 @@
 import datetime
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -36,10 +37,8 @@ def create_heatmap(
 
     Returns:
     --------
-    tuple: (fig, pivot_df, pvalue_df)
-        - fig: The heatmap figure
-        - pivot_df: The original pivot table with raw counts
-        - pvalue_df: DataFrame containing p-values and cell values for all row/column combinations
+    matplotlib.figure.Figure
+        The heatmap figure
     """
     import numpy as np
     import pandas as pd
@@ -82,8 +81,8 @@ def create_heatmap(
             "measure must be either 'containers', 'std_cartons', or 'revenue'"
         )
 
-    if value_col == "income":
-        filtered_df = filtered_df.dropna(subset=["income"])
+    # if value_col == "income":
+    #     filtered_df = filtered_df.dropna(subset=["income"])
 
     # Create a pivot table
     try:
@@ -115,6 +114,7 @@ def create_heatmap(
                 fill_value=0,
             )
         else:  # value_col == 'income' or any other numeric
+            print(filtered_df.columns)
             pivot_df = filtered_df.pivot_table(
                 index=row_col,
                 columns=col_col,
@@ -550,8 +550,15 @@ def create_heatmap(
     # Adjust the spacing between subplots to increase the gap between heatmap and annotations
     plt.subplots_adjust(hspace=0.2)  # Increased from 0.05 to 0.2
 
-    # Return the figure, DataFrame, and p-value table
-    return fig, pivot_df, pvalue_table
+    # Return the figure, pivot_df, and pvalue_df as a tuple
+    result = (fig, pivot_df, pvalue_table)
+    
+    # Add pivot_df and pvalue_df to the figure as metadata
+    fig.pivot_df = pivot_df
+    fig.pvalue_df = pvalue_table
+    
+    # Return just the figure for compatibility with export_plot_as_png function
+    return fig
 
 
 def create_heatmap_packing_week(
@@ -563,15 +570,15 @@ def create_heatmap_packing_week(
     min_effect_size=2.5,
 ):
     """
-    Create a heatmap from the DataFrame with packing_week as rows, ordered chronologically.
+    Create a heatmap that shows percentages across packing weeks and a selected variable.
     This function combines create_heatmap and display_time_ordered_heatmap functionality.
-
+    
     Parameters:
     -----------
     df : pandas.DataFrame
         The DataFrame containing the data
     col_col : str
-        Column name to use for columns (entity)
+        Column name to use for columns
     value_col : str
         Column name to use for values/counts
     significance_level : float, optional
@@ -580,13 +587,11 @@ def create_heatmap_packing_week(
         Whether to apply correction for multiple testing (default True)
     min_effect_size : float, optional
         Minimum percentage point difference required for significance testing (default 2.5)
-
+        
     Returns:
     --------
-    tuple: (fig, pivot_df, pvalue_df)
-        - fig: The heatmap figure
-        - pivot_df: The original pivot table with raw counts
-        - pvalue_df: DataFrame containing p-values and cell values for all row/column combinations
+    matplotlib.figure.Figure
+        The heatmap figure
     """
     import numpy as np
     import pandas as pd
@@ -1000,5 +1005,12 @@ def create_heatmap_packing_week(
     plt.sca(ax)  # Set ax as the current axis
     plt.xticks(rotation=45, ha="right")
     
-    # Return the figure, DataFrame, and p-value table
-    return fig, pivot_df, pvalue_table
+    # Return the figure, pivot_df, and pvalue_table as a tuple
+    result = (fig, pivot_df, pvalue_table)
+    
+    # Add pivot_df and pvalue_df to the figure as metadata
+    fig.pivot_df = pivot_df
+    fig.pvalue_df = pvalue_table
+    
+    # Return just the figure for compatibility with export_plot_as_png function
+    return fig

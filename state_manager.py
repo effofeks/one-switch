@@ -28,7 +28,6 @@ def initialize_session_state():
     if "visualisation" not in st.session_state:
         st.session_state.visualisation = {
             "type": None,  # Type of visualisation (e.g., "network", "heatmap")
-            "data": None,  # The data used for visualisation
             "params": {},  # Parameters used to generate the visualisation
             "graph": None,  # Network graph for network visualisations
             "plot": None,  # Matplotlib figure for static visualisations
@@ -49,7 +48,6 @@ def clear_visualisation_state():
     """Clear all visualisation-related state variables."""
     st.session_state.visualisation = {
         "type": None,
-        "data": None,
         "params": {},
         "graph": None,
         "plot": None,
@@ -63,7 +61,7 @@ def clear_visualisation_state():
 
 
 def update_visualisation_state(
-    viz_type, data, params, graph=None, plot=None, html=None, metadata=None
+    viz_type, params, graph=None, plot=None, html=None, metadata=None
 ):
     """
     Update the unified visualisation state with new data.
@@ -72,8 +70,6 @@ def update_visualisation_state(
     -----------
     viz_type : str
         Type of visualisation (e.g., "network", "heatmap")
-    data : pandas.DataFrame
-        Data used for the visualisation
     params : dict
         Parameters used to generate the visualisation
     graph : networkx.Graph, optional
@@ -88,7 +84,6 @@ def update_visualisation_state(
     # Update the visualisation state
     st.session_state.visualisation = {
         "type": viz_type,
-        "data": data,
         "params": params,
         "graph": graph,
         "plot": plot,
@@ -189,7 +184,6 @@ def create_network_visualisation(viz_type, df, params, visualisation_func, graph
         # Update visualisation state
         update_visualisation_state(
             viz_type=viz_type,
-            data=df,
             params=params,
             graph=G,
             plot=fig,
@@ -204,7 +198,7 @@ def create_network_visualisation(viz_type, df, params, visualisation_func, graph
 
 def create_strong_connections_network(params):
     """Create the Strong Connections network visualisation."""
-    df = st.session_state.visualisation.get('data') or st.session_state.df
+    df = st.session_state.df
     
     # Add focal info to metadata
     focal_info = get_strong_connection_focal_info(
@@ -244,7 +238,7 @@ def create_strong_connections_network(params):
 
 def create_company_network(params):
     """Create the Company Network visualisation."""
-    df = st.session_state.visualisation.get('data') or st.session_state.df
+    df = st.session_state.df
     
     # Create visualisation function with specific parameters
     def viz_func(df, **viz_params):
@@ -299,7 +293,7 @@ def create_company_network(params):
 def create_network_timelapse(params):
     """Create the Network Timelapse visualisation."""
     try:
-        df = st.session_state.visualisation.get('data') or st.session_state.df
+        df = st.session_state.df
         
         if df is None:
             st.error("No data available for visualisation.")
@@ -322,7 +316,6 @@ def create_network_timelapse(params):
         # Update the visualisation state
         update_visualisation_state(
             viz_type="network_timelapse",
-            data=df,
             params=params,
             graph=G,
             html=html,
@@ -344,14 +337,14 @@ def create_heatmap_visualisation(viz_type, df, params, heatmap_func):
     Parameters:
     -----------
     viz_type : str
-        Type of heatmap visualisation
+        Type of heatmap visualisation (e.g., "standard_heatmap", "packing_week_heatmap")
     df : pandas.DataFrame
         Data for visualisation
     params : dict
         Parameters for the visualisation
     heatmap_func : function
-        The specific heatmap function to call
-    
+        Function to generate the heatmap
+        
     Returns:
     --------
     bool
@@ -362,74 +355,38 @@ def create_heatmap_visualisation(viz_type, df, params, heatmap_func):
             st.error("No data available for visualisation.")
             return False
             
-        # Filter parameters based on which function is being called
-        import inspect
-        func_params = inspect.signature(heatmap_func).parameters
-        filtered_params = {k: v for k, v in params.items() if k in func_params}
+        # Call the heatmap function
+        fig = heatmap_func(df, **params)
         
-        # Create the heatmap with only compatible parameters
-        result = heatmap_func(df=df, **filtered_params)
+        if fig is None:
+            st.error("Failed to generate heatmap.")
+            return False
         
-        fig, pivot_df, pvalue_df = result[0], result[1], result[2]
-        
-        # # Handle different return types safely
-        # if isinstance(result, tuple):
-        #     if len(result) >= 3:  # Now expecting (fig, pivot_df, pvalue_df)
-        #         fig, pivot_df, pvalue_df = result[0], result[1], result[2]
-        #     elif len(result) >= 2:
-        #         fig, pivot_df = result[0], result[1]
-        #         pvalue_df = None
-        #     elif len(result) == 1:
-        #         fig, pivot_df, pvalue_df = result[0], None, None
-        #     else:
-        #         st.error(f"Unexpected empty result from {viz_type} heatmap function")
-        #         return False
-        # else:
-        #     # If only a figure is returned
-        #     fig, pivot_df, pvalue_df = result, None, None
-        
-        # Close the figure to free memory
-        plt.close(fig)
-        
-        # Ensure pivot_df is Arrow-compatible by converting to simple types
-        # Convert all columns to string and numeric types that Arrow can handle
-        if pivot_df is not None:
-            # Convert index and columns to strings
-            pivot_df.index = pivot_df.index.astype(str)
-            pivot_df.columns = pivot_df.columns.astype(str)
-            # Convert all values to float64 to ensure Arrow compatibility
-            pivot_df = pivot_df.astype(float)
-        
-        # Create metadata dictionary
-        metadata = {"pivot_data": pivot_df}
-        
-        # Add p-value table to metadata if it exists
-        if pvalue_df is not None:
-            # Convert index and columns to strings
-            pvalue_df.index = pvalue_df.index.astype(str)
-            pvalue_df.columns = pvalue_df.columns.astype(str)
-            metadata["pvalue_table"] = pvalue_df
-        
-        # Update the visualisation state (keep all params for statistics)
+        # Extract pivot_df and pvalue_df from figure metadata
+        metadata = {}
+        if hasattr(fig, 'pivot_df'):
+            metadata['pivot_data'] = fig.pivot_df
+        if hasattr(fig, 'pvalue_df'):
+            metadata['pvalue_table'] = fig.pvalue_df
+            
+        # Add the heatmap to the state
         update_visualisation_state(
             viz_type=viz_type,
-            data=df,
             params=params,  # Use original params for stats
             plot=fig,
             metadata=metadata,
         )
         
         return True
+        
     except Exception as e:
-        st.error(f"Error generating {viz_type} heatmap: {str(e)}")
-        import traceback
-        st.error(traceback.format_exc())  # Print stack trace for debugging
+        st.error(f"Error generating {viz_type} visualisation: {str(e)}")
         return False
 
 
 def create_standard_heatmap(params):
     """Create a standard heatmap visualisation."""
-    df = st.session_state.visualisation.get('data') or st.session_state.df
+    df = st.session_state.df
     
     # Filter out parameters not accepted by create_heatmap
     heatmap_params = {
@@ -454,7 +411,7 @@ def create_standard_heatmap(params):
 
 def create_packing_week_heatmap(params):
     """Create a packing week heatmap visualisation."""
-    df = st.session_state.visualisation.get('data') or st.session_state.df
+    df = st.session_state.df
     
     # Filter out parameters not accepted by create_heatmap_packing_week
     heatmap_params = {

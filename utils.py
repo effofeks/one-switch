@@ -48,14 +48,20 @@ CG_COL_TYPES = {
 }
 
 FIN_COL_TYPES = {
+    "invoice_line_item_id": "Int64",
     "cg_id": "Int64",
     "document_type": str,
     "cost_type": str,
+    # "cost_code_name": str,
     "currency": str,
     "cgt_amount": "Float64",
     "exchange_rate": "Float64",
-    "payment_status": str,
     "price_unit": str,
+    "order_price": "Float64",
+    "order_price_unit": str,
+    "order_price_per_carton": "Float64",
+    "total_value_per_carton": "Float64",
+    "payment_status": str,
     "incoterm": str,
 }
 
